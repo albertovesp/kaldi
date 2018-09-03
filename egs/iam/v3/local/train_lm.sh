@@ -4,7 +4,7 @@
 #           2016  Johns Hopkins University (author: Daniel Povey)
 #           2017  Ashish Arora
 #           2017  Hossein Hadian
-#	    2018  Desh Raj
+#	        2018  Desh Raj
 # Apache 2.0
 #
 # This script trains an LM on the LOB+Brown text data and IAM training transcriptions.
@@ -64,22 +64,11 @@ if [ $stage -le 0 ]; then
       local/remove_test_utterances_from_lob.py data/test/text.old data/val/text.old \
                                                > data/local/lob-train-only.txt
   fi
-  tempfile=$(mktemp)
-  cat data/local/lob-train-only.txt > $tempfile 
-  utils/lang/bpe/apply_unigram_sr.py -i $tempfile -m 'data/local/unigram_sr' \
-    -o ${dir}/data/text/lob.txt
-  rm $tempfile
-  tempfile=$(mktemp)
-  cat data/local/browncorpus/brown.txt > $tempfile
-  utils/lang/bpe/apply_unigram_sr.py -i $tempfile -m 'data/local/unigram_sr' \
-    -o ${dir}/data/text/brown.txt
-  rm $tempfile
+  utils/lang/bpe/apply_unigram_sr.py -i 'data/local/lob-train-only.txt' -m 'data/local/unigram_sr' -o ${dir}/data/text/lob.txt
+  utils/lang/bpe/apply_unigram_sr.py -i 'data/local/browncorpus/brown.txt' -m 'data/local/unigram_sr' -o ${dir}/data/text/brown.txt
+  
   if [ -d "data/local/wellingtoncorpus" ]; then
-    tempfile=$(mktemp)
-    cat data/local/wellingtoncorpus/Wellington_annotation_removed.txt > $tempfile
-    utils/lang/bpe/apply_unigram_sr.py -i $tempfile -m 'data/local/unigram_sr' \
-      -o ${dir}/data/text/wellington.txt
-    rm $tempfile
+    utils/lang/bpe/apply_unigram_sr.py -i 'data/local/wellingtoncorpus/Wellington_annotation_removed.txt' -m 'data/local/unigram_sr' -o ${dir}/data/text/wellington.txt
   fi
 
   # use the validation data as the dev set.
@@ -155,7 +144,7 @@ if [ $stage -le 3 ]; then
   # Using 500,000 n-grams for a smaller LM for graph building.  Prune from the
   # bigger-pruned LM, it'll be faster.
   size=500000
-  prune_lm_dir.py --target-num-ngrams=$size ${dir}/data/lm_${order}_prune_big ${dir}/data/lm_${order}_prune_small --initial-threshold=0.5
+  prune_lm_dir.py --target-num-ngrams=$size ${dir}/data/lm_${order}_prune_big ${dir}/data/lm_${order}_prune_small --initial-threshold=0.3
 
   get_data_prob.py ${dir}/data/real_dev_set.txt ${dir}/data/lm_${order}_prune_small 2>&1 | grep -F '[perplexity'
 

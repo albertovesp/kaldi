@@ -3,7 +3,7 @@
 #	    2018    Desh Raj
 
 set -e
-stage=2
+stage=3
 nj=20
 username=
 password=
@@ -55,13 +55,13 @@ if [ $stage -le 2 ]; then
   echo "$0: Preparing unigram subword model..."
   tempfile=$(mktemp)
   cut -d' ' -f2- data/train/text > $tempfile
-  echo $tempfile
   utils/lang/bpe/learn_unigram_sr.py -i "$tempfile" -s 700 -o 'data/local/unigram_sr'
   rm $tempfile
 fi
 
 if [ $stage -le 3 ]; then
   for set in test train val; do
+    [ -e data/$set/text.old ] && mv data/$set/text.old data/$set/text
     cut -d' ' -f1 data/$set/text > data/$set/ids
     tempfile=$(mktemp)
     cut -d' ' -f2- data/$set/text > $tempfile

@@ -6,6 +6,7 @@ import os
 import numpy as np
 import sys
 import re
+import codecs
 
 parser = argparse.ArgumentParser(description="""Removes dev/test set lines
                                                 from the LOB corpus. Reads the
@@ -44,7 +45,7 @@ def remove_special_words(words):
 # remove special words, punctuations, spaces between words
 # lowercase the characters
 def read_utterances(text_file_path):
-    with open(text_file_path, 'rt') as in_file:
+    with codecs.open(text_file_path, 'r', encoding='utf-8') as in_file:
         for line in in_file:
             words = line.strip().split()
             words_wo_sw = remove_special_words(words)

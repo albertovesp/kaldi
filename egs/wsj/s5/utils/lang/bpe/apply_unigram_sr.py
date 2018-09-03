@@ -28,7 +28,7 @@ def create_parser():
 
     parser.add_argument(
         '--input', '-i',
-        help="Input text (default: standard input).")
+        help="Input text file.")
 
     parser.add_argument(
         '--model', '-m', default='model',
@@ -50,9 +50,10 @@ def main(infile, model, outfile):
     with codecs.open(infile, encoding="utf-8") as f:
         lines = f.readlines()
         for line in lines:
-            line = line
-            sw = sp.EncodeAsPieces(line)
-            sw = ' '.join(sw).replace('_','|')
+            line = line.split(' ')
+            sw = [' '.join(sp.EncodeAsPieces(word)) for word in line]
+            sw = [x.replace("\xe2\x96\x81","|") for x in sw]
+            sw = ' '.join(sw)
             fout.write(sw + '\n')
     fout.close()
     

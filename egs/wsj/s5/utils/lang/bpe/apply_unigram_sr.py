@@ -50,10 +50,7 @@ def main(infile, model, outfile):
     with codecs.open(infile, encoding="utf-8") as f:
         lines = f.readlines()
         for line in lines:
-            line = line.split(' ')
-            sw = [' '.join(sp.EncodeAsPieces(word)) for word in line]
-            sw = [x.replace("\xe2\x96\x81","|") for x in sw]
-            sw = ' '.join(sw)
+            sw = (' '.join(sp.EncodeAsPieces(line))).replace('▁','|')
             fout.write(sw + '\n')
     fout.close()
     

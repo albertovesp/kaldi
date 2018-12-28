@@ -122,6 +122,7 @@ if [[ ! -f $srcdir/lexicon.txt ]]; then
   echo "**Creating $srcdir/lexicon.txt from $srcdir/lexiconp.txt"
   perl -ape 's/(\S+\s+)\S+\s+(.+)/$1$2/;' < $srcdir/lexiconp.txt > $srcdir/lexicon.txt || exit 1;
 fi
+
 if [[ ! -f $srcdir/lexiconp.txt ]]; then
   echo "**Creating $srcdir/lexiconp.txt from $srcdir/lexicon.txt"
   perl -ape 's/(\S+\s+)(.+)/${1}1.0\t$2/;' < $srcdir/lexicon.txt > $srcdir/lexiconp.txt || exit 1;

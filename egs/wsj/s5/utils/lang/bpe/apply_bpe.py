@@ -83,19 +83,22 @@ class BPE(object):
             # eliminate double spaces
             if not word:
                 continue
-            new_word = [out for segment in self._isolate_glossaries(word)
-                        for out in encode(segment,
-                                          self.bpe_codes,
-                                          self.bpe_codes_reverse,
-                                          self.vocab,
-                                          self.separator,
-                                          self.version,
-                                          self.cache,
-                                          self.glossaries)]
+            elif word == "|<unk>":
+                output.append(word)
+            else:
+                new_word = [out for segment in self._isolate_glossaries(word)
+                            for out in encode(segment,
+                                              self.bpe_codes,
+                                              self.bpe_codes_reverse,
+                                              self.vocab,
+                                              self.separator,
+                                              self.version,
+                                              self.cache,
+                                              self.glossaries)]
 
-            for item in new_word[:-1]:
-                output.append(item + self.separator)
-            output.append(new_word[-1])
+                for item in new_word[:-1]:
+                    output.append(item + self.separator)
+                output.append(new_word[-1])
 
         return ' '.join(output)
 

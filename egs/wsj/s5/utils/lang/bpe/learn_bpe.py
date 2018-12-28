@@ -69,6 +69,7 @@ def get_vocabulary(fobj, is_dict=False):
             for word in line.strip().split(' '):
                 if word:
                     vocab[word] += 1
+    vocab.pop("<unk>", None)
     return vocab
 
 def update_pair_statistics(pair, changed, stats, indices):

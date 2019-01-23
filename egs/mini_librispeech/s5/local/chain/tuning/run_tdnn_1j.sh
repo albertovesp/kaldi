@@ -18,7 +18,7 @@
 # Set -e here so that we catch if any executable fails immediately
 set -euo pipefail
 
-# First the options that are passed through to run_ivector_common.sh
+# First the options that are passed through to run_xvector_common.sh
 # (some of which are also used in this script directly).
 stage=0
 decode_nj=10

@@ -73,31 +73,6 @@ if [ $stage -le 3 ]; then
 fi
 
 if [ $stage -le 4 ]; then
-  # Create high-resolution MFCC features (with 40 cepstra instead of 13).
-  # this shows how you can split across multiple file-systems.
-  echo "$0: creating high-resolution MFCC features"
-  mfccdir=data/${train_set}_sp_hires/data
-  if [[ $(hostname -f) == *.clsp.jhu.edu ]] && [ ! -d $mfccdir/storage ]; then
-    utils/create_split_dir.pl /export/fs0{1,2}/$USER/kaldi-data/mfcc/mini_librispeech-$(date +'%m_%d_%H_%M')/s5/$mfccdir/storage $mfccdir/storage
-  fi
-
-  for datadir in ${train_set}_sp ${test_sets}; do
-    utils/copy_data_dir.sh data/$datadir data/${datadir}_hires
-  done
-
-  # do volume-perturbation on the training data prior to extracting hires
-  # features; this helps make trained nnets more invariant to test data volume.
-  utils/data/perturb_data_dir_volume.sh data/${train_set}_sp_hires || exit 1;
-
-  for datadir in ${train_set}_sp ${test_sets}; do
-    steps/make_mfcc.sh --nj 10 --mfcc-config conf/mfcc_hires.conf \
-      --cmd "$train_cmd" data/${datadir}_hires || exit 1;
-    steps/compute_cmvn_stats.sh data/${datadir}_hires || exit 1;
-    utils/fix_data_dir.sh data/${datadir}_hires || exit 1;
-  done
-fi
-
-if [ $stage -le 5 ]; then
   echo "$0: computing a subset of data to train the diagonal UBM."
   # We'll use about a quarter of the data.
   mkdir -p exp/nnet3${nnet3_affix}/diag_ubm
@@ -125,17 +100,6 @@ if [ $stage -le 5 ]; then
 fi
 
 if [ $stage -le 6 ]; then
-  # Train the iVector extractor.  Use all of the speed-perturbed data since iVector extractors
-  # can be sensitive to the amount of data.  The script defaults to an iVector dimension of
-  # 100.
-  echo "$0: training the iVector extractor"
-  steps/online/nnet2/train_ivector_extractor.sh --cmd "$train_cmd" --nj 10 \
-     data/${train_set}_sp_hires exp/nnet3${nnet3_affix}/diag_ubm \
-     exp/nnet3${nnet3_affix}/extractor || exit 1;
-fi
-
-
-if [ $stage -le 7 ]; then
   # We extract iVectors on the speed-perturbed training data after combining
   # short segments, which will be what we train the system on.  With
   # --utts-per-spk-max 2, the script pairs the utterances into twos, and treats
@@ -158,15 +122,14 @@ if [ $stage -le 7 ]; then
   utils/data/modify_speaker_info.sh --utts-per-spk-max 2 \
     data/${train_set}_sp_hires ${temp_data_root}/${train_set}_sp_hires_max2
 
-  steps/online/nnet2/extract_xvectors.sh --cmd "$train_cmd" --nj 20 \
-    ${temp_data_root}/${train_set}_sp_hires_max2 $lang_dir \
-    exp/nnet3${nnet3_affix}/extractor $ivectordir
+  local/nnet3/extract_xvectors.sh --cmd "$train_cmd" --nj 20 \
+    exp/xvector_nnet_1a ${temp_data_root}/${train_set}_sp_hires_max2 $ivectordir
 
   # Also extract iVectors for the test data, but in this case we don't need the speed
   # perturbation (sp).
   for data in $test_sets; do
-    steps/online/nnet2/extract_xvectors.sh --cmd "$train_cmd" --nj 20 \
-      data/${data}_hires $lang_dir exp/nnet3${nnet3_affix}/extractor \
+    local/nnet3/extract_xvectors.sh --cmd "$train_cmd" --nj 20 \
+      exp/xvector_nnet_1a data/${data}_hires \
       exp/nnet3${nnet3_affix}/ivectors_${data}_hires
   done
 fi

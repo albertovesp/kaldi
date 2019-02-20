@@ -74,31 +74,42 @@ lat_dir=exp/chain_lats
 
 required_files="$src_mfcc_config $src_mdl $src_lang/phones.txt $src_dict/lexicon.txt $src_tree_dir/tree"
 
-use_ivector=true
-ivector_dim=$(nnet3-am-info --print-args=false $src_mdl | grep "ivector-dim" | cut -d" " -f2)
-if [ -z $ivector_dim ]; then ivector_dim=0 ; fi
-
-if [ ! -z $src_ivec_extractor_dir ]; then
-  if [ $ivector_dim -eq 0 ]; then
-    echo "$0: Source ivector extractor dir '$src_ivec_extractor_dir' is "
-    echo "specified but ivector is not used in training the source model '$src_mdl'."
-  else
-    required_files="$required_files $src_ivec_extractor_dir/final.dubm $src_ivec_extractor_dir/final.mat $src_ivec_extractor_dir/final.ie"
-    use_ivector=true
-  fi
-else
-  if [ $ivector_dim -gt 0 ]; then
-    echo "$0: ivector is used in training the source model '$src_mdl' but no "
-    echo " --src-ivec-extractor-dir option as ivector dir for source model is specified." && exit 1;
-  fi
-fi
-
-
 for f in $required_files; do
   if [ ! -f $f ]; then
     echo "$0: no such file $f" && exit 1;
   fi
 done
+
+use_ivector=true
+
+if [ $stage -le 1 ]; then
+    # Create onehot ivectors for training and dev data
+  local/nnet3/create_onehot_ivectors.sh  --stage $stage \
+                       --ivector-dir exp/nnet3${nnet3_affix}/ivectors_${train_set}_sp_hires \
+                       --spk2utt data/${train_set}_sp_hires/spk2utt \
+                       --nnet3-affix "$nnet3_affix" || exit 1;
+
+  local/nnet3/create_onehot_ivectors.sh --stage $stage \
+                       --ivector-dir exp/nnet3${nnet3_affix}/ivectors_${test_sets}_hires \
+                       --spk2utt data/${test_sets}_hires/spk2utt \
+                       --nnet3-affix "$nnet3_affix" || exit 1;
+
+fi
+
+src_mdl_dir=`dirname $src_mdl`
+ivec_opt="--online-ivector-dir exp/nnet3${nnet_affix}/ivectors_${train_set}_sp_hires"
+
+# Copying ivectors across frames
+if [ $stage -le 4 ]; then
+  local/nnet3/copy_across_frames.sh \
+    --dir exp/nnet3${nnet3_affix}/ivectors_${train_set}_sp_hires \
+    --data data/${train_set}_sp_hires
+
+  local/nnet3/copy_across_frames.sh \
+    --dir exp/nnet3${nnet3_affix}/ivectors_${test_sets}_hires \
+    --data data/${test_sets}_hires
+fi
+
 
 local/online/run_nnet2_common.sh  --stage $stage \
                                   --ivector-dim $ivector_dim \
@@ -106,7 +117,8 @@ local/online/run_nnet2_common.sh  --stage $stage \
                                   --mfcc-config $src_mfcc_config \
                                   --extractor $src_ivec_extractor_dir || exit 1;
 src_mdl_dir=`dirname $src_mdl`
-ivec_opt=""
+ivec_opt="--online-ivector-dir exp/nnet3${nnet_affix}/ivectors_${train_set}_sp_hires"
+
 if $use_ivector;then ivec_opt="--online-ivector-dir exp/nnet2${nnet_affix}/ivectors" ; fi
 
 if [ $stage -le 4 ]; then

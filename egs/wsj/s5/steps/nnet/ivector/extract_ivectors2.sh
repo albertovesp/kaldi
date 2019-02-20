@@ -71,7 +71,7 @@ if [ $# != 4 ] && [ $# != 5 ]; then
   exit 1;
 fi
 
-set -euxo pipefail
+set -exo pipefail
 
 if [ $# -eq 4 ]; then
   data=$1
@@ -171,44 +171,44 @@ if [ $stage -le 2 ]; then
       gmm-global-get-post --n=$num_gselect --min-post=$min_post $srcdir/final.dubm "$gmm_feats" ark:- \| \
       ivector-extract --acoustic-weight=$posterior_scale --compute-objf-change=true \
         --max-count=$max_count --spk2utt=ark:$this_sdata/JOB/spk2utt \
-      $srcdir/final.ie "$feats" ark,s,cs:- ark:$dir/ivectors_spk.JOB.ark
+      $srcdir/final.ie "$feats" ark,s,cs:- ark,t:$dir/ivectors_spk.JOB.ark
   fi
 fi
 
-# Per-utterance i-vectors,
 if [ $stage -le 3 ]; then
-  if [ ! -z "$ali_or_decode_dir" ]; then
-    $cmd JOB=1:$nj $dir/log/extract_ivectors_utt.JOB.log \
-      gmm-global-get-post --n=$num_gselect --min-post=$min_post $srcdir/final.dubm "$gmm_feats" ark:- \| \
-      weight-post ark:- "ark,s,cs:gunzip -c $dir/weights.gz|" ark:- \| \
-      ivector-extract --acoustic-weight=$posterior_scale --compute-objf-change=true --max-count=$max_count \
-      $srcdir/final.ie "$feats" ark,s,cs:- ark:$dir/ivectors_utt.JOB.ark
-  else
-    $cmd JOB=1:$nj $dir/log/extract_ivectors_utt.JOB.log \
-      gmm-global-get-post --n=$num_gselect --min-post=$min_post $srcdir/final.dubm "$gmm_feats" ark:- \| \
-      ivector-extract --acoustic-weight=$posterior_scale --compute-objf-change=true --max-count=$max_count \
-      $srcdir/final.ie "$feats" ark,s,cs:- ark:$dir/ivectors_utt.JOB.ark
-  fi
+  for j in $(seq $nj); do
+    utils/apply_map.pl -f 2 $dir/ivectors_spk.$j.ark <$this_sdata/$j/utt2spk >$dir/ivectors_utt.$j.ark || exit 1;
+  done
 fi
 
 absdir=$(utils/make_absolute.sh $dir)
+
+ivector_dim=$[$(head -n 1 $dir/ivectors_spk.1.ark | wc -w) - 3] || exit 1;
+echo  "$0: iVector dim is $ivector_dim"
+
+base_feat_dim=$(feat-to-dim scp:$data/feats.scp -) || exit 1;
+start_dim=$base_feat_dim
+end_dim=$[$base_feat_dim+$ivector_dim-1]
+compress=true
+ivector_period=10
+
 if [ $stage -le 4 ]; then
-  echo "$0: merging iVectors across jobs"
-  copy-vector "ark:cat $dir/ivectors_spk.*.ark |" ark,scp:$absdir/ivectors_spk.ark,$dir/ivectors_spk.scp
-  rm $dir/ivectors_spk.*.ark
-  copy-vector "ark:cat $dir/ivectors_utt.*.ark |" ark,scp:$absdir/ivectors_utt.ark,$dir/ivectors_utt.scp
-  rm $dir/ivectors_utt.*.ark
+  #combine ivectors into ivector_online.scp
+  $cmd JOB=1:$nj $dir/log/duplicate_feats.JOB.log \
+    append-vector-to-feats scp:$sdata/JOB/feats.scp ark:$dir/ivectors_utt.JOB.ark ark:- \| \
+    select-feats "$start_dim-$end_dim" ark:- ark:- \| \
+    subsample-feats --n=$ivector_period ark:- ark:- \| \
+    copy-feats --compress=$compress ark:- \
+    ark,scp:$absdir/ivector_online.JOB.ark,$absdir/ivector_online.JOB.scp || exit 1;
 fi
 
-# duplicate the `speaker' i-vector to all `utterances' of that speaker,
 if [ $stage -le 5 ]; then
-  # filter utt2spk (remove speakers with no iVector),
-  awk -v ivec_spk=$dir/ivectors_spk.scp \
-    'BEGIN{ while(getline < ivec_spk) { spk_has_ivec[$1] = 1; }} { spk=$2; if(spk_has_ivec[spk]) { print $0 }}' \
-    $data/utt2spk >$dir/utt2spk.filt
-  # expand the list of i-vectors,
-  utils/apply_map.pl -f 2 $dir/ivectors_spk.scp <$dir/utt2spk.filt >$dir/ivectors_spk-as-utt.scp
+  echo "$0: combining iVectors across jobs"
+  for j in $(seq $nj); do cat $dir/ivector_online.$j.scp; done >$dir/ivector_online.scp || exit 1;
 fi
+
+steps/nnet2/get_ivector_id.sh $srcdir > $dir/final.ie.id || exit 1
 
 echo "$0: done extracting iVectors (per-speaker, per-sentence) into '$dir'"
+
 

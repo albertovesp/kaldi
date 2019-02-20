@@ -63,7 +63,7 @@ for f in $gmm_dir/final.mdl $train_data_dir/feats.scp $train_ivector_dir/ivector
     $lores_train_data_dir/feats.scp $ali_dir/ali.1.gz $gmm_dir/final.mdl; do
   [ ! -f $f ] && echo "$0: expected file $f to exist" && exit 1
 done
-exit 1
+
 if [ $stage -le 14 ]; then
   echo "$0: creating lang directory with one state per phone."
   # Create a version of the lang/ directory that has one state per phone in the
@@ -125,12 +125,12 @@ if [ $stage -le 17 ]; then
   
   input name=ivector dim=600
   relu-batchnorm-layer name=svector_hidden dim=600 l2-regularize=0.001 
-  batchnorm-layer name=svector dim=100 orthonormal-constraint=-1 l2-regularize=0.001 target-rms=0.1
+  relu-batchnorm-layer name=svector dim=100 l2-regularize=0.001 target-rms=0.1
   
   input dim=40 name=input
   
   # the first splicing is moved before the lda layer, so no splicing here
-  relu-batchnorm-layer name=tdnn1 dim=1280
+  relu-batchnorm-layer name=tdnn1 dim=1280 input=Append(-1,0,1,ReplaceIndex(svector, t, 0))
   linear-component name=tdnn2l dim=256 input=Append(-1,0)
   relu-batchnorm-layer name=tdnn2 input=Append(0,1) dim=1280
   linear-component name=tdnn3l dim=256

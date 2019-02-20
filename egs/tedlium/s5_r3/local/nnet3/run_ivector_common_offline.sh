@@ -118,15 +118,17 @@ if [ $stage -le 5 ]; then
   # of each pseudo-speaker).
   temp_data_root=${ivectordir}
 
-  steps/nnet/ivector/extract_ivectors2.sh --cmd "$train_cmd" --nj $nj \
-    ${temp_data_root}/${train_set}_sp_hires \
+  steps/nnet/ivector/extract_ivectors2.sh --cmd "$train_cmd" --nj $nj --stage 4\
+    data/${train_set}_sp_hires \
+    data/lang_chain \
     exp/nnet3${nnet3_affix}/extractor $ivectordir
 
   # Also extract iVectors for the test data, but in this case we don't need the speed
   # perturbation (sp) or small-segment concatenation (comb).
   for data in dev test; do
     steps/nnet/ivector/extract_ivectors2.sh --cmd "$train_cmd" --nj "$nj" \
-      data/${data}_hires exp/nnet3${nnet3_affix}/extractor \
+      data/${data}_hires data/lang_chain \
+      exp/nnet3${nnet3_affix}/extractor \
       exp/nnet3${nnet3_affix}/ivectors_${data}_hires
   done
 fi

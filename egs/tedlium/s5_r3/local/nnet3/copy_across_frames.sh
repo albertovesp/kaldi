@@ -25,7 +25,7 @@ ivector_period=10
 compress=true
 
 $cmd $dir/log/duplicate_feats.log \
-  append-vector-to-feats scp:$data/feats.scp scp:$dir/ivectors_onehot.scp ark:- \| \
+  append-vector-to-feats scp:$data/feats.scp scp:$dir/ivector_online.scp ark:- \| \
   select-feats "$start_dim-$end_dim" ark:- ark:- \| \
   subsample-feats --n=$ivector_period ark:- ark:- \| \
   copy-feats --compress=$compress ark:- \

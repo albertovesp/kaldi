@@ -16,7 +16,7 @@ cmd='run.pl'
 
 ivector_dim=$(< $data/spk2utt wc -l)
 
-base_feat_dim=$(feat-to-dim scp:$data/feats.scp -) || exit 1;
+base_feat_dim=$(feat-to-dim scp:$data/feats.scp -)
 start_dim=$base_feat_dim
 end_dim=$[$base_feat_dim+$ivector_dim-1]
 absdir=$(utils/make_absolute.sh $dir)

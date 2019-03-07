@@ -40,7 +40,7 @@ phone_lm_scales="1,1" # comma-separated list of positive integer multiplicities
 
 # model and dirs for source model used for transfer learning
 src_mdl=./exp/chain_cleaned/tdnnf_1a/final.mdl # input chain model
-
+src_chain_dir=exp/chain_cleaned/tdnnf_1a
 src_mfcc_config=./conf/mfcc_hires.conf # mfcc config used to extract higher dim
 src_ivec_extractor_dir=exp/nnet3/ivectors_${train_set}_sp_hires # source ivector extractor dir used to extract ivector for
                          # source data and the ivector for target data is extracted using this extractor.
@@ -58,7 +58,7 @@ src_dict=data/local/dict_nosp  # dictionary for source dataset containing lexico
 src_tree_dir=exp/chain_cleaned/tree      # chain tree-dir for src data;
                                          # the alignment in target domain is
                                          # converted using src-tree
-
+src_graph_dir=${src_chain_dir}/graph
 xent_regularize=0.1
 # End configuration section.
 
@@ -102,15 +102,11 @@ for f in $required_files; do
 done
 
 if [ $stage -le 3 ]; then
-    # Create onehot ivectors for training and dev data
-  local/nnet3/create_onehot_ivectors.sh  --stage $stage \
-                       --ivector-dir exp/nnet3${nnet3_affix}/ivectors_${train_set}_sp_hires \
-                       --spk2utt data/${train_set}_sp_hires/spk2utt \
-                       --nnet3-affix "$nnet3_affix" || exit 1;
-
+  # Create onehot ivectors and initial matrix for dev data
   local/nnet3/create_onehot_ivectors.sh --stage $stage \
                        --ivector-dir exp/nnet3${nnet3_affix}/ivectors_${test_sets}_hires \
                        --spk2utt data/${test_sets}_hires/spk2utt \
+                       --online-ivector-dir ${backup_ivec_dir}/ivectors_${test_sets}_hires \
                        --nnet3-affix "$nnet3_affix" || exit 1;
 
 fi
@@ -120,22 +116,20 @@ ivec_opt="--online-ivector-dir ${backup_ivec_dir}/ivectors_${test_sets}_hires"
 
 # Copying ivectors across frames
 if [ $stage -le 4 ]; then
-  #local/nnet3/copy_across_frames.sh \
-  #  --dir exp/nnet3${nnet3_affix}/ivectors_${train_set}_sp_hires \
-  #  --data data/${train_set}_sp_hires
 
   local/nnet3/copy_across_frames.sh \
     --dir exp/nnet3${nnet3_affix}/ivectors_${test_sets}_hires \
-    --data data/${test_sets}_hires
+    --data data/${test_sets}_hires \
+    --nnet3-affix ${nnet3_affix}
 fi
 
 if [ $stage -le 5 ]; then
   echo "$0: getting the decoding lattices for the unsupervised subset using the chain model at: $src_chain_dir"
-  steps/nnet3/decode_semisup.sh --num-threads 4 --nj $nj --cmd "$decode_cmd" \
+  steps/nnet3/decode_semisup.sh --num-threads 4 --nj 10 --cmd "$decode_cmd" \
             --acwt 1.0 --post-decode-acwt 10.0 --write-compact false --skip-scoring true \
             --online-ivector-dir ${backup_ivec_dir}/ivectors_${test_sets}_hires \
             --scoring-opts "--min-lmwt 10 --max-lmwt 10" --word-determinize false \
-            $graphdir data/${test_sets}_hires $src_chain_dir/decode_${test_sets}
+            ${src_graph_dir} data/${test_sets}_hires $src_chain_dir/decode_${test_sets}
 fi
 
 # Get best path alignment and lattice posterior of best path alignment to be
@@ -158,6 +152,7 @@ cmvn_opts=$(cat $src_chain_dir/cmvn_opts) || exit 1
 # them into 100 dimensional vectors.
 if [ $stage -le 7 ]; then
   ivector_dim=$(< data/${test_sets}_hires/spk2utt wc -l)
+  ivector_dir=exp/nnet3${nnet3_affix}/ivectors_${test_sets}_hires
   output_opts="l2-regularize=0.015"
   mkdir -p $dir/configs
 
@@ -172,30 +167,16 @@ if [ $stage -le 7 ]; then
  
   input name=ivector dim=$ivector_dim
  ## adding the layers for chain branch
-  affine-layer name=svector_hidden matrix=$dir/configs/initial_ivectors.mat
-  relu-batchnorm-layer name=svector dim=100 l2-regularize=0.001 target-rms=0.1
+  linear-component name=svector_hidden.affine input=ivector dim=600 matrix=$ivector_dir/initial_ivectors.mat 
+  relu-batchnorm-layer name=svector input=svector_hidden.affine dim=100 l2-regularize=0.001 target-rms=0.1
 
-  input name=input dim=40
-  relu-batchnorm-layer name=tdnn1 dim=1280 input=Append(-1,0,1,ReplaceIndex(svector, t, 0))
   output-layer name=output include-log-softmax=false dim=$num_targets $output_opts
 EOF
  
   steps/nnet3/xconfig_to_configs.py \
     --xconfig-file  $dir/configs/network.xconfig  \
-    --config-dir $dir/configs/
+    --config-dir $dir/configs/ 
 fi
-
-## TODO: At present, after this stage, we have to manually edit the final.config
-## file. This needs to be automated.
-
-# Get values for $model_left_context, $model_right_context
-. $dir/configs/vars
-
-left_context=$model_left_context
-right_context=$model_right_context
-
-egs_left_context=$(perl -e "print int($left_context + $frame_subsampling_factor / 2)")
-egs_right_context=$(perl -e "print int($right_context + $frame_subsampling_factor / 2)")
 
 if [ $stage -le 8 ]; then
   # Set the learning-rate-factor to be primary_lr_factor for transferred layers "
@@ -206,6 +187,15 @@ if [ $stage -le 8 ]; then
       --edits="set-learning-rate-factor name=* learning-rate-factor=0.0; set-learning-rate-factor name=svector* learning-rate-factor=1.0" $src_mdl - \| \
       nnet3-init --srand=1 - $dir/configs/final.config $dir/input.raw  || exit 1;
 fi
+
+# Get values for $model_left_context, $model_right_context
+. $dir/configs/vars
+
+left_context=$model_left_context
+right_context=$model_right_context
+
+egs_left_context=$(perl -e "print int($left_context + $frame_subsampling_factor / 2)")
+egs_right_context=$(perl -e "print int($right_context + $frame_subsampling_factor / 2)")
 
 if [ $stage -le 9 ]; then
   echo "$0: compute {den,normalization}.fst using weighted phone LM."
@@ -224,13 +214,14 @@ lattice_prune_beam=4.0  # beam for pruning the lattices prior to getting egs
                         # for unsupervised data
 tolerance=1   # frame-tolerance for chain training
 
+unsup_lat_dir=${src_chain_dir}/decode_${test_sets}
 if [ -z "$unsup_egs_dir" ]; then
   unsup_egs_dir=$dir/egs_${test_sets}
 
   if [ $stage -le 10 ]; then
     if [[ $(hostname -f) == *.clsp.jhu.edu ]] && [ ! -d $unsup_egs_dir/storage ]; then
       utils/create_split_dir.pl \
-       /export/b0{5,6,7,8}/$USER/kaldi-data/egs/fisher_english-$(date +'%m_%d_%H_%M')/s5c/$unsup_egs_dir/storage $unsup_egs_dir/storage
+       /export/b0{5,6,7,8}/$USER/kaldi-data/egs/tedlium-$(date +'%m_%d_%H_%M')/s5_r3/$unsup_egs_dir/storage $unsup_egs_dir/storage
     fi
     mkdir -p $unsup_egs_dir
     touch $unsup_egs_dir/.nodelete # keep egs around when that run dies.
@@ -245,7 +236,7 @@ if [ -z "$unsup_egs_dir" ]; then
       --cmvn-opts "$cmvn_opts" --lattice-lm-scale $lattice_lm_scale \
       --lattice-prune-beam "$lattice_prune_beam" \
       --deriv-weights-scp $src_chain_dir/best_path_${test_sets}/weights.scp \
-      --online-ivector-dir $backup_ivec_dir/ivectors_${test_sets}_hires \
+      --online-ivector-dir exp/nnet3${nnet3_affix}/ivectors_${test_sets}_hires \
       --generate-egs-scp true $unsup_egs_opts \
       data/${test_sets}_hires $dir \
       $unsup_lat_dir $unsup_egs_dir
@@ -253,10 +244,6 @@ if [ -z "$unsup_egs_dir" ]; then
 fi
 
 if [ $stage -le 11 ]; then
-  if [[ $(hostname -f) == *.clsp.jhu.edu ]] && [ ! -d $dir/egs/storage ]; then
-    utils/create_split_dir.pl \
-     /export/b0{3,4,5,6}/$USER/kaldi-data/egs/rm-$(date +'%m_%d_%H_%M')/s5/$dir/egs/storage $dir/egs/storage
-  fi
   # exclude phone_LM and den.fst generation training stage
   if [ $train_stage -lt -4 ]; then train_stage=-4 ; fi
 
@@ -289,14 +276,14 @@ if [ $stage -le 11 ]; then
     --trainer.optimization.final-effective-lrate=0.0001 \
     --trainer.num-chunk-per-minibatch=128 \
     --egs.chunk-width=150 \
-    --egs.dir="$common_egs_dir" \
+    --egs.dir="$unsup_egs_dir" \
     --egs.opts="--frames-overlap-per-eg 0" \
     --cleanup.remove-egs=$remove_egs \
     --use-gpu=true \
     --reporting.email="$reporting_email" \
     --feat-dir=data/${test_sets}_hires \
     --tree-dir=$src_tree_dir \
-    --lat-dir=$lat_dir \
+    --lat-dir=$unsup_lat_dir \
     --dir=$dir  || exit 1;
 
 fi

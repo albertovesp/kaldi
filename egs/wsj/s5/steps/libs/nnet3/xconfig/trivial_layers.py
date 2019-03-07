@@ -208,7 +208,8 @@ class XconfigLinearComponent(XconfigLayerBase):
                        'max-change': 0.75,
                        'l2-regularize': '',
                        'param-stddev': '',
-                       'learning-rate-factor': '' }
+                       'learning-rate-factor': '',
+                       'matrix': ''}
 
     def check_configs(self):
         if self.config['dim'] <= 0:
@@ -243,7 +244,7 @@ class XconfigLinearComponent(XconfigLayerBase):
 
         opts = ''
         for opt_name in ['orthonormal-constraint', 'max-change', 'l2-regularize',
-                         'param-stddev', 'learning-rate-factor' ]:
+                         'param-stddev', 'learning-rate-factor', 'matrix' ]:
             value = self.config[opt_name]
             if value != '':
                 opts += ' {0}={1}'.format(opt_name, value)

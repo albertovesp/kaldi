@@ -160,11 +160,10 @@ if [ $stage -le 6 ]; then
  
   input name=ivector dim=$ivector_dim
  ## adding the layers for chain branch
-  relu-batchnorm-layer name=svector_hidden dim=$ivector_dim l2-regularize=0.001 input=ivector
+  relu-batchnorm-layer name=svector_hidden dim=50 l2-regularize=0.001 input=ivector
   relu-batchnorm-layer name=svector dim=100 l2-regularize=0.001 target-rms=0.1 input=svector_hidden
 
   input name=input dim=40
-  relu-batchnorm-layer name=tdnn1 dim=1280 input=Append(-1,0,1,ReplaceIndex(svector, t, 0))
   output-layer name=output include-log-softmax=false dim=$num_targets $output_opts
 EOF
  
@@ -255,7 +254,7 @@ if [ $stage -le 10 ]; then
     --nj 20 --cmd "$decode_cmd" $test_ivec_opt \
     $dir/graph data/dev_hires $dir/decode || exit 1;
   steps/lmrescore_const_arpa.sh --cmd "$decode_cmd" data/lang data/lang_rescore \
-    data/${test_sets}_hires ${dir}/decode_${test_sets} ${dir}/decode_${test_sets}_rescore || exit 1
+    data/${test_sets}_hires ${dir}/decode ${dir}/decode_${test_sets}_rescore || exit 1
 fi
 wait;
 exit 0;

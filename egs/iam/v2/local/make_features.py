@@ -213,6 +213,13 @@ def horizontal_shear(im, degree):
     sheared_im = affine_transform(im_pad, shear_matrix, cval=255.0)
     return sheared_im
 
+def pixel_masking(im, alpha):
+    nrows, ncols = im.shape
+    rows = np.random.randint(nrows, size=int(alpha*nrows))
+    cols = np.random.randint(ncols, size=int(alpha*ncols))
+    im[rows,] = 0
+    im[:,cols] = 0
+    return (im)
 
 ### main ###
 random.seed(1)
@@ -250,7 +257,8 @@ with open(data_list_path) as f:
             im_contrast = contrast_normalization(im_aug, 0.05, 0.2)
             slant_degree = find_slant_project(im_contrast)
             im_sheared = horizontal_shear(im_contrast, slant_degree)
-            im_aug = im_sheared
+            im_masked = pixel_masking(im_sheared, alpha=0.1)
+            im_aug = im_masked
         else:
             im_aug = get_scaled_image_aug(im, aug_setting[0])
         im_horizontal_padded = horizontal_pad(im_aug, allowed_lengths)

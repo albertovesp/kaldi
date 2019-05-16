@@ -70,9 +70,13 @@ struct ChainTrainingOptions {
   // should have a softmax as its final nonlinearity.
   BaseFloat xent_regularize;
 
+  // Boosting factor (between 0 and 1). If 0, it just means regular
+  // LF-MMI training. If non-zero, it performs boosted LF-MMI training.
+  BaseFloat boost_factor;
+
   ChainTrainingOptions(): l2_regularize(0.0), out_of_range_regularize(0.01),
                           leaky_hmm_coefficient(1.0e-05),
-                          xent_regularize(0.0) { }
+                          xent_regularize(0.0), boost_factor(0.0) { }
 
   void Register(OptionsItf *opts) {
     opts->Register("l2-regularize", &l2_regularize, "l2 regularization "
@@ -93,6 +97,10 @@ struct ChainTrainingOptions {
                    "nonzero, the network is expected to have an output "
                    "named 'output-xent', which should have a softmax as "
                    "its final nonlinearity.");
+    opts->Register("boost-factor", &boost_factor, "Boosting factor "
+                   "parameter for boosted LF-MMI training. The default "
+                   "value 0.0 means it performs normal LF-MMI. Must be "
+                   "between 0 and 1.")
   }
 };
 
@@ -140,7 +148,19 @@ void ComputeChainObjfAndDeriv(const ChainTrainingOptions &opts,
                               CuMatrixBase<BaseFloat> *nnet_output_deriv,
                               CuMatrix<BaseFloat> *xent_output_deriv = NULL);
 
-
+/**
+Same as ComputeChainObjfAndDeriv function but computes the boosted LF-MMI instead
+of regular LF-MMI.
+*/
+void ComputeBoostedChainObjfAndDeriv(const ChainTrainingOptions &opts,
+                              const DenominatorGraph &den_graph,
+                              const Supervision &supervision,
+                              const CuMatrixBase<BaseFloat> &nnet_output,
+                              BaseFloat *objf,
+                              BaseFloat *l2_term,
+                              BaseFloat *weight,
+                              CuMatrixBase<BaseFloat> *nnet_output_deriv,
+                              CuMatrix<BaseFloat> *xent_output_deriv = NULL);
 
 }  // namespace chain
 }  // namespace kaldi

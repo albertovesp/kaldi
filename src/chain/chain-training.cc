@@ -316,6 +316,122 @@ void ComputeChainObjfAndDeriv(const ChainTrainingOptions &opts,
   }
 }
 
+void ComputeBoostedChainObjfAndDeriv(const ChainTrainingOptions &opts,
+                              const DenominatorGraph &den_graph,
+                              const Supervision &supervision,
+                              const CuMatrixBase<BaseFloat> &nnet_output,
+                              BaseFloat *objf,
+                              BaseFloat *l2_term,
+                              BaseFloat *weight,
+                              CuMatrixBase<BaseFloat> *nnet_output_deriv,
+                              CuMatrix<BaseFloat> *xent_output_deriv) {
+  if (!supervision.e2e_fsts.empty()) {
+    ComputeBoostedChainObjfAndDerivE2e(opts, den_graph, supervision,
+                                nnet_output, objf, l2_term,
+                                weight, nnet_output_deriv, xent_output_deriv);
+    return;
+  }
+
+  BaseFloat num_logprob_weighted, den_logprob_weighted;
+  bool ok = true;
+  if (nnet_output_deriv != NULL)
+    nnet_output_deriv->SetZero();
+
+  { // We need to do the numerator first because we need the
+    // posteriors from the numerator for the boosting term
+    // in the denominator.
+
+    NumeratorComputation numerator(supervision, nnet_output);
+    // note: supervision.weight is included as a factor in the derivative from
+    // the numerator object, as well as the returned logprob.
+    num_logprob_weighted = numerator.Forward();
+
+    if (xent_output_deriv) {
+      numerator.Backward(xent_output_deriv);
+      if (nnet_output_deriv)
+        nnet_output_deriv->AddMat(1.0, *xent_output_deriv);
+    } else if (nnet_output_deriv) {
+      numerator.Backward(nnet_output_deriv);
+    }
+  }
+  { // Doing the denominator first helps to reduce the maximum
+    // memory use, as we can set 'xent_deriv' to nonempty after
+    // we've freed the memory in this object.
+    DenominatorComputation denominator(opts, den_graph,
+                                       supervision.num_sequences,
+                                       nnet_output);
+
+    den_logprob_weighted = supervision.weight * denominator.Forward();
+    if (nnet_output_deriv)
+      ok = denominator.Backward(-supervision.weight,
+                                nnet_output_deriv);
+  }
+
+  if (nnet_output_deriv != NULL && RandInt(0, 1) == 0) {
+    // Only do this about every other frame, for efficiency; we'll multiply the
+    // scale by 2 to compensate.  See docs for the function, for its purpose.
+    PenalizeOutOfRange(nnet_output, 30.0,
+                       2.0 * opts.out_of_range_regularize,
+                       nnet_output_deriv);
+  }
+
+  if (xent_output_deriv != NULL) {
+    // the reason for kStrideEqualNumCols is so that we can share the memory
+    // block with the memory that was used for exp_nnet_output_transposed_ from
+    // chain-denominator.cc, which has just been freed; it also uses the
+    // kStrideEqualNumCols arg (its shape is the transpose of this matrix's
+    // shape).
+    xent_output_deriv->Resize(nnet_output.NumRows(), nnet_output.NumCols(),
+                              kSetZero, kStrideEqualNumCols);
+  }
+
+
+
+  *objf = num_logprob_weighted - den_logprob_weighted;
+  *weight = supervision.weight * supervision.num_sequences *
+      supervision.frames_per_sequence;
+  if (!((*objf) - (*objf) == 0) || !ok) {
+    // inf or NaN detected, or denominator computation returned false.
+    if (nnet_output_deriv)
+      nnet_output_deriv->SetZero();
+    if (xent_output_deriv)
+      xent_output_deriv->SetZero();
+    BaseFloat default_objf = -10;
+    KALDI_WARN << "Objective function is " << (*objf)
+               << " and denominator computation (if done) returned "
+               << std::boolalpha << ok
+               << ", setting objective function to " << default_objf
+               << " per frame.";
+    *objf  = default_objf * *weight;
+  }
+
+  // This code helps us see how big the derivatives are, on average,
+  // for different frames of the sequences.  As expected, they are
+  // smaller towards the edges of the sequences (due to the penalization
+  // of 'incorrect' pdf-ids.
+  if (GetVerboseLevel() >= 1 && nnet_output_deriv != NULL && RandInt(0, 10) == 0) {
+    int32 tot_frames = nnet_output_deriv->NumRows(),
+ frames_per_sequence = supervision.frames_per_sequence,
+       num_sequences = supervision.num_sequences;
+    CuVector<BaseFloat> row_products(tot_frames);
+    row_products.AddDiagMat2(1.0, *nnet_output_deriv, kNoTrans, 0.0);
+    Vector<BaseFloat> row_products_cpu(row_products);
+    Vector<BaseFloat> row_products_per_frame(frames_per_sequence);
+    for (int32 i = 0; i < tot_frames; i++)
+      row_products_per_frame(i / num_sequences) += row_products_cpu(i);
+    KALDI_LOG << "Derivs per frame are " << row_products_per_frame;
+  }
+
+  if (opts.l2_regularize == 0.0) {
+    *l2_term = 0.0;
+  } else {
+    // compute the l2 penalty term and its derivative
+    BaseFloat scale = supervision.weight * opts.l2_regularize;
+    *l2_term = -0.5 * scale * TraceMatMat(nnet_output, nnet_output, kTrans);
+    if (nnet_output_deriv)
+      nnet_output_deriv->AddMat(-1.0 * scale, nnet_output);
+  }
+}
 
 }  // namespace chain
 }  // namespace kaldi

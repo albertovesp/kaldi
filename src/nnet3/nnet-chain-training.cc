@@ -40,6 +40,8 @@ NnetChainTrainer::NnetChainTrainer(const NnetChainTrainingOptions &opts,
   KALDI_ASSERT(opts.nnet_config.momentum >= 0.0 &&
                opts.nnet_config.max_param_change >= 0.0 &&
                opts.nnet_config.backstitch_training_interval > 0);
+  KALDI_ASSERT(opts.chain_config.boost_factor >= 0.0 &&
+               opts.chain_config.boost_factor <= 1.0);
   delta_nnet_ = nnet_->Copy();
   ScaleNnet(0.0, delta_nnet_);
 
@@ -61,6 +63,7 @@ void NnetChainTrainer::Train(const NnetChainExample &chain_eg) {
   bool need_model_derivative = true;
   const NnetTrainerOptions &nnet_config = opts_.nnet_config;
   bool use_xent_regularization = (opts_.chain_config.xent_regularize != 0.0);
+  bool use_boosting = (opts_.chain_config.boost_factor != 0.0);
   ComputationRequest request;
   GetChainComputationRequest(*nnet_, chain_eg, need_model_derivative,
                              nnet_config.store_component_stats,
@@ -227,11 +230,19 @@ void NnetChainTrainer::ProcessOutputs(bool is_backstitch_step2,
 
     BaseFloat tot_objf, tot_l2_term, tot_weight;
 
-    ComputeChainObjfAndDeriv(opts_.chain_config, den_graph_,
-                             sup.supervision, nnet_output,
-                             &tot_objf, &tot_l2_term, &tot_weight,
-                             &nnet_output_deriv,
-                             (use_xent ? &xent_deriv : NULL));
+    if (opts_.chain_config.boost_factor == 0) {
+        ComputeChainObjfAndDeriv(opts_.chain_config, den_graph_,
+                                 sup.supervision, nnet_output,
+                                 &tot_objf, &tot_l2_term, &tot_weight,
+                                 &nnet_output_deriv,
+                                 (use_xent ? &xent_deriv : NULL));
+    } else {
+        ComputeBoostedChainObjfAndDeriv(opts_.chain_config, den_graph_,
+                                 sup.supervision, nnet_output,
+                                 &tot_objf, &tot_l2_term, &tot_weight,
+                                 &nnet_output_deriv,
+                                 (use_xent ? &xent_deriv : NULL));
+    }
 
     if (use_xent) {
       // this block computes the cross-entropy objective.

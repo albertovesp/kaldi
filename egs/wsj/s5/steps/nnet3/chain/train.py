@@ -156,6 +156,12 @@ def get_args():
                         steps/nnet3/get_saturation.pl) exceeds this threshold
                         we scale the parameter matrices with the
                         shrink-value.""")
+    parser.add_argument("--trainer.boost-factor", type=float,
+                        dest='boost_factor', default=0.0,
+                        help="""Boosting factor to boost the per frame
+                        likelihood according to the numerator posterior
+                        probability when forward-backward is performed
+                        on the denominator graph.""")
     # RNN-specific training options
     parser.add_argument("--trainer.deriv-truncate-margin", type=int,
                         dest='deriv_truncate_margin', default=None,
@@ -534,6 +540,7 @@ def train(args, run_opts):
                 xent_regularize=args.xent_regularize,
                 leaky_hmm_coefficient=args.leaky_hmm_coefficient,
                 momentum=args.momentum,
+                boost_factor=args.boost_factor,
                 max_param_change=args.max_param_change,
                 shuffle_buffer_size=args.shuffle_buffer_size,
                 frame_subsampling_factor=args.frame_subsampling_factor,

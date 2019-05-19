@@ -229,15 +229,16 @@ void NnetChainTrainer::ProcessOutputs(bool is_backstitch_step2,
     CuMatrix<BaseFloat> xent_deriv;
 
     BaseFloat tot_objf, tot_l2_term, tot_weight;
+    bool use_boosting = (opts_.chain_config.boost_factor != 0.0);
 
-    if (opts_.chain_config.boost_factor == 0) {
-        ComputeChainObjfAndDeriv(opts_.chain_config, den_graph_,
+    if (use_boosting) {
+        ComputeBoostedChainObjfAndDeriv(opts_.chain_config, den_graph_,
                                  sup.supervision, nnet_output,
                                  &tot_objf, &tot_l2_term, &tot_weight,
                                  &nnet_output_deriv,
                                  (use_xent ? &xent_deriv : NULL));
     } else {
-        ComputeBoostedChainObjfAndDeriv(opts_.chain_config, den_graph_,
+        ComputeChainObjfAndDeriv(opts_.chain_config, den_graph_,
                                  sup.supervision, nnet_output,
                                  &tot_objf, &tot_l2_term, &tot_weight,
                                  &nnet_output_deriv,

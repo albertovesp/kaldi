@@ -29,7 +29,8 @@ DenominatorComputation::DenominatorComputation(
     const ChainTrainingOptions &opts,
     const DenominatorGraph &den_graph,
     int32 num_sequences,
-    const CuMatrixBase<BaseFloat> &nnet_output):
+    const CuMatrixBase<BaseFloat> &nnet_output,
+    const CuMatrixBase<BaseFloat> *boosting_mask):
     opts_(opts),
     den_graph_(den_graph),
     num_sequences_(num_sequences),
@@ -82,7 +83,15 @@ DenominatorComputation::DenominatorComputation(
   exp_nnet_output_transposed_.Resize(nnet_output.NumCols(),
                                      nnet_output.NumRows(),
                                      kUndefined, kStrideEqualNumCols);
-  exp_nnet_output_transposed_.CopyFromMat(nnet_output, kTrans);
+  if (opts_.boost_factor != 0.0 && boosting_mask) {
+    KALDI_LOG << "boosting..." << opts_.boost_factor;
+    exp_nnet_output_transposed_.CopyFromMat(*boosting_mask, kTrans);
+    exp_nnet_output_transposed_.Scale(-opts_.boost_factor);
+    exp_nnet_output_transposed_.AddMat(1.0, nnet_output, kTrans);
+  } else {
+    KALDI_LOG << "not boosting..." << opts_.boost_factor;
+    exp_nnet_output_transposed_.CopyFromMat(nnet_output, kTrans);
+  }
   // We limit the nnet output to the range [-30,30] before doing the exp;
   // this avoids NaNs appearing in the forward-backward computation, which
   // is not done in log space.

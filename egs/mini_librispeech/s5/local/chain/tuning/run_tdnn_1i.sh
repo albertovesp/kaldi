@@ -194,6 +194,7 @@ if [ $stage -le 14 ]; then
     --chain.l2-regularize=0.0 \
     --chain.apply-deriv-weights=false \
     --chain.lm-opts="--num-extra-lm-states=2000" \
+    --chain.boost-factor=$boost_factor \
     --trainer.dropout-schedule $dropout_schedule \
     --trainer.add-option="--optimization.memory-compression-level=2" \
     --trainer.srand=$srand \
@@ -205,7 +206,6 @@ if [ $stage -le 14 ]; then
     --trainer.optimization.initial-effective-lrate=0.002 \
     --trainer.optimization.final-effective-lrate=0.0002 \
     --trainer.num-chunk-per-minibatch=128,64 \
-    --trainer.boost-factor=$boost_factor \
     --egs.chunk-width=$chunk_width \
     --egs.dir="$common_egs_dir" \
     --egs.opts="--frames-overlap-per-eg 0" \

@@ -281,7 +281,7 @@ def train_one_iteration(dir, iter, srand, egs_dir,
         dir=dir, iter=iter, egs_dir=egs_dir,
         l2_regularize=l2_regularize, xent_regularize=xent_regularize,
         leaky_hmm_coefficient=leaky_hmm_coefficient, run_opts=run_opts,
-        use_multitask_egs=use_multitask_egs)
+        boost_factor=boost_factor, use_multitask_egs=use_multitask_egs)
 
     if iter > 0:
         # Runs in the background
@@ -476,6 +476,7 @@ def prepare_initial_acoustic_model(dir, run_opts, srand=-1, input_model=None):
 def compute_train_cv_probabilities(dir, iter, egs_dir, l2_regularize,
                                    xent_regularize, leaky_hmm_coefficient,
                                    run_opts,
+                                   boost_factor,
                                    use_multitask_egs=False):
     model = '{0}/{1}.mdl'.format(dir, iter)
     scp_or_ark = "scp" if use_multitask_egs else "ark"
@@ -491,12 +492,14 @@ def compute_train_cv_probabilities(dir, iter, egs_dir, l2_regularize,
         """{command} {dir}/log/compute_prob_valid.{iter}.log \
                 nnet3-chain-compute-prob --l2-regularize={l2} \
                 --leaky-hmm-coefficient={leaky} --xent-regularize={xent_reg} \
+                --boost-factor={boost_factor} \
                 {model} {dir}/den.fst \
                 "ark,bg:nnet3-chain-copy-egs {multitask_egs_opts} {scp_or_ark}:{egs_dir}/valid_diagnostic{egs_suffix} \
                     ark:- | nnet3-chain-merge-egs --minibatch-size=1:64 ark:- ark:- |" \
         """.format(command=run_opts.command, dir=dir, iter=iter, model=model,
                    l2=l2_regularize, leaky=leaky_hmm_coefficient,
                    xent_reg=xent_regularize,
+                   boost_factor=boost_factor,
                    egs_dir=egs_dir,
                    multitask_egs_opts=multitask_egs_opts,
                    scp_or_ark=scp_or_ark, egs_suffix=egs_suffix))
@@ -510,12 +513,14 @@ def compute_train_cv_probabilities(dir, iter, egs_dir, l2_regularize,
         """{command} {dir}/log/compute_prob_train.{iter}.log \
                 nnet3-chain-compute-prob --l2-regularize={l2} \
                 --leaky-hmm-coefficient={leaky} --xent-regularize={xent_reg} \
+                --boost-factor={boost_factor} \
                 {model} {dir}/den.fst \
                 "ark,bg:nnet3-chain-copy-egs {multitask_egs_opts} {scp_or_ark}:{egs_dir}/train_diagnostic{egs_suffix} \
                     ark:- | nnet3-chain-merge-egs --minibatch-size=1:64 ark:- ark:- |" \
         """.format(command=run_opts.command, dir=dir, iter=iter, model=model,
                    l2=l2_regularize, leaky=leaky_hmm_coefficient,
                    xent_reg=xent_regularize,
+                   boost_factor=boost_factor,
                    egs_dir=egs_dir,
                    multitask_egs_opts=multitask_egs_opts,
                    scp_or_ark=scp_or_ark, egs_suffix=egs_suffix))
@@ -561,7 +566,7 @@ def compute_progress(dir, iter, run_opts):
 
 def combine_models(dir, num_iters, models_to_combine, num_chunk_per_minibatch_str,
                    egs_dir, leaky_hmm_coefficient, l2_regularize,
-                   xent_regularize, run_opts,
+                   xent_regularize, run_opts, boost_factor,
                    max_objective_evaluations=30,
                    use_multitask_egs=False):
     """ Function to do model combination
@@ -607,6 +612,7 @@ def combine_models(dir, num_iters, models_to_combine, num_chunk_per_minibatch_st
                 nnet3-chain-combine \
                 --max-objective-evaluations={max_objective_evaluations} \
                 --l2-regularize={l2} --leaky-hmm-coefficient={leaky} \
+                --boost-factor={boost_factor} \
                 --verbose=3 {combine_gpu_opt} {dir}/den.fst {raw_models} \
                 "ark,bg:nnet3-chain-copy-egs {multitask_egs_opts} {scp_or_ark}:{egs_dir}/combine{egs_suffix} ark:- | \
                     nnet3-chain-merge-egs --minibatch-size={num_chunk_per_mb} \
@@ -618,6 +624,7 @@ def combine_models(dir, num_iters, models_to_combine, num_chunk_per_minibatch_st
                     combine_gpu_opt=run_opts.combine_gpu_opt,
                     max_objective_evaluations=max_objective_evaluations,
                     l2=l2_regularize, leaky=leaky_hmm_coefficient,
+                    boost_factor=boost_factor,
                     dir=dir, raw_models=" ".join(raw_model_strings),
                     num_chunk_per_mb=num_chunk_per_minibatch_str,
                     num_iters=num_iters,
@@ -632,5 +639,6 @@ def combine_models(dir, num_iters, models_to_combine, num_chunk_per_minibatch_st
         dir=dir, iter='final', egs_dir=egs_dir,
         l2_regularize=l2_regularize, xent_regularize=xent_regularize,
         leaky_hmm_coefficient=leaky_hmm_coefficient,
+        boost_factor=boost_factor,
         run_opts=run_opts,
         use_multitask_egs=use_multitask_egs)

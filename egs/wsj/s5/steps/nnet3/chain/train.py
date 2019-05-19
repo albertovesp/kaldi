@@ -101,6 +101,12 @@ def get_args():
                         dest='left_deriv_truncate',
                         default=None,
                         help="Deprecated. Kept for back compatibility")
+    parser.add_argument("--chain.boost-factor", type=float,
+                        dest='boost_factor', default=0.0,
+                        help="""Boosting factor to boost the per frame
+                        likelihood according to the numerator posterior
+                        probability when forward-backward is performed
+                        on the denominator graph.""")
 
     # trainer options
     parser.add_argument("--trainer.input-model", type=str,
@@ -156,12 +162,6 @@ def get_args():
                         steps/nnet3/get_saturation.pl) exceeds this threshold
                         we scale the parameter matrices with the
                         shrink-value.""")
-    parser.add_argument("--trainer.boost-factor", type=float,
-                        dest='boost_factor', default=0.0,
-                        help="""Boosting factor to boost the per frame
-                        likelihood according to the numerator posterior
-                        probability when forward-backward is performed
-                        on the denominator graph.""")
     # RNN-specific training options
     parser.add_argument("--trainer.deriv-truncate-margin", type=int,
                         dest='deriv_truncate_margin', default=None,
@@ -581,6 +581,7 @@ def train(args, run_opts):
                 leaky_hmm_coefficient=args.leaky_hmm_coefficient,
                 l2_regularize=args.l2_regularize,
                 xent_regularize=args.xent_regularize,
+                boost_factor=args.boost_factor,
                 run_opts=run_opts,
                 max_objective_evaluations=args.max_objective_evaluations,
                 use_multitask_egs=use_multitask_egs)
@@ -592,6 +593,7 @@ def train(args, run_opts):
                 dir=args.dir, iter=num_iters, egs_dir=egs_dir,
                 l2_regularize=args.l2_regularize, xent_regularize=args.xent_regularize,
                 leaky_hmm_coefficient=args.leaky_hmm_coefficient,
+                boost_factor=args.boost_factor,
                 run_opts=run_opts,
                 use_multitask_egs=use_multitask_egs)
             common_lib.force_symlink("compute_prob_valid.{iter}.log"

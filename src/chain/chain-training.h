@@ -100,7 +100,7 @@ struct ChainTrainingOptions {
     opts->Register("boost-factor", &boost_factor, "Boosting factor "
                    "parameter for boosted LF-MMI training. The default "
                    "value 0.0 means it performs normal LF-MMI. Must be "
-                   "between 0 and 1.")
+                   "between 0 and 1.");
   }
 };
 

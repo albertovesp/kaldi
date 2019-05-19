@@ -352,11 +352,15 @@ void ComputeBoostedChainObjfAndDeriv(const ChainTrainingOptions &opts,
     if (nnet_output_deriv) {
       numerator.Backward(nnet_output_deriv);
       if (xent_output_deriv)
+				xent_output_deriv->Resize(nnet_output.NumRows(), nnet_output.NumCols(),
+                              kSetZero, kStrideEqualNumCols);
         xent_output_deriv->CopyFromMat(*nnet_output_deriv);
     } else if (xent_output_deriv) {
       // this branch will be taken if xent_output_deriv but not
       // nnet_output_deriv is set- which could happen if you want to compute the
       // cross-entropy objective but not the derivatives.
+			xent_output_deriv->Resize(nnet_output.NumRows(), nnet_output.NumCols(),
+                              kSetZero, kStrideEqualNumCols);
       xent_output_deriv->SetZero();
       numerator.Backward(xent_output_deriv);
     }

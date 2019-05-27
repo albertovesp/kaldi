@@ -113,7 +113,7 @@ if [ ! -f $data/text ] && ! $no_text; then
 fi
 
 num_utts=`cat $tmpdir/utts | wc -l`
-if [ -f $data/text ]; then
+if [ -f $data/text ] && [ ! $no_text ]; then
   utils/validate_text.pl $data/text || exit 1;
   check_sorted_and_uniq $data/text
   text_len=`cat $data/text | wc -l`

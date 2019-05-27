@@ -91,7 +91,8 @@ fi
 # Feature extraction,
 if [ $stage -le 4 ]; then
   for dset in train dev eval; do
-    steps/make_mfcc.sh --nj 15 --cmd "$train_cmd" data/$mic/$dset
+    steps/make_mfcc.sh --write-utt2dur false --nj 15 \
+      --cmd "$train_cmd" data/$mic/$dset
     steps/compute_cmvn_stats.sh data/$mic/$dset
     utils/fix_data_dir.sh data/$mic/$dset
   done
@@ -163,18 +164,18 @@ if [ $stage -le 10 ]; then
   local/run_cleanup_segmentation.sh --mic $mic
 fi
 
-if [ $stage -le 11 ]; then
+if [ $stage -le 18 ]; then
   ali_opt=
   [ "$mic" != "ihm" ] && ali_opt="--use-ihm-ali true"
-  local/chain/run_tdnn.sh $ali_opt --mic $mic
+  local/chain/tuning/run_tdnn_1j.sh $ali_opt --mic $mic --stage $stage
 fi
 
-if [ $stage -le 12 ]; then
+#if [ $stage -le 12 ]; then
 #  the following shows how you would run the nnet3 system; we comment it out
 #  because it's not as good as the chain system.
 #  ali_opt=
 #  [ "$mic" != "ihm" ] && ali_opt="--use-ihm-ali true"
 # local/nnet3/run_tdnn.sh $ali_opt --mic $mic
-fi
+#fi
 
 exit 0

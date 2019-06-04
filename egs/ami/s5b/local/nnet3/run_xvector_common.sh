@@ -123,17 +123,16 @@ if [ $stage -le 15 ]; then
     data/${mic}/${train_set}_sp_hires_comb ${temp_data_root}/${train_set}_sp_hires_comb_max2
 
   steps/online/nnet2/extract_xvectors.sh --cmd "$train_cmd" --nj 20 \
-    ${temp_data_root}/${train_set}_sp_hires_comb_max2 $lang_dir \
-    $xvector_extractor_dir $ivectordir
+    $xvector_extractor_dir ${temp_data_root}/${train_set}_sp_hires_comb_max2 \
+    $ivectordir
 
   # Also extract iVectors for the test data, but in this case we don't need the speed
   # perturbation (sp).
   for data in dev eval; do
     steps/online/nnet2/extract_xvectors.sh --cmd "$train_cmd" --nj 20 \
-      data/$mic/${data}_hires $lang_dir $xvector_extractor_dir \
-      exp/nnet3${nnet3_affix}/xvectors_${data}_hires
+      $xvector_extractor_dir data/$mic/${data}_hires \
+      exp/$mic/nnet3${nnet3_affix}/xvectors_${data}_hires
   done
 fi
-
 
 exit 0;

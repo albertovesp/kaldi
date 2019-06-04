@@ -47,20 +47,20 @@ for f in data/${mic}/${train_set}${ihm_suffix}/utt2spk; do
 done
 
 
-if [ -f data/${mic}/${train_set}${ihm_suffix}_sp/feats.scp ] && [ $stage -le 9 ]; then
+if [ -f data/${mic}/${train_set}${ihm_suffix}_sp/feats.scp ] && [ $stage -le 16 ]; then
   echo "$0: $feats already exists.  Refusing to overwrite the features "
   echo " to avoid wasting time.  Please remove the file and continue if you really mean this."
   exit 1;
 fi
 
 
-if [ $stage -le 8 ]; then
+if [ $stage -le 16 ]; then
   echo "$0: preparing directory for ${maybe_ihm}speed-perturbed data (for alignment)"
   utils/data/perturb_data_dir_speed_3way.sh \
     data/${mic}/${train_set}${ihm_suffix} data/${mic}/${train_set}${ihm_suffix}_sp
 fi
 
-if [ $stage -le 9 ]; then
+if [ $stage -le 17 ]; then
   echo "$0: making MFCC features for speed-perturbed ${maybe_ihm}data"
   steps/make_mfcc.sh --nj $nj \
     --cmd "$train_cmd" data/${mic}/${train_set}${ihm_suffix}_sp
@@ -71,7 +71,7 @@ if [ $stage -le 9 ]; then
 fi
 
 if [ ! -z "$min_seg_len" ]; then
-  if [ $stage -le 10 ]; then
+  if [ $stage -le 18 ]; then
     echo "$0: combining short segments of 13-dimensional speed-perturbed ${maybe_ihm}MFCC data"
     src=data/${mic}/${train_set}${ihm_suffix}_sp
     dest=data/${mic}/${train_set}${ihm_suffix}_sp_comb

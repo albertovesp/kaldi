@@ -15,7 +15,7 @@ gmm=tri3_cleaned  # the gmm for the target data
 ihm_gmm=tri3  # the gmm for the IHM system (if --use-ihm-ali true).
 num_threads_ubm=32
 ivector_transform_type=pca
-xvector_extractor_dir=xvector_rir_nnet_1a
+xvector_extractor_dir=exp/xvector_rir_nnet_1a
 nnet3_affix=_cleaned  # cleanup affix for nnet3 and chain dirs, e.g. _cleaned
 num_epochs=9
 remove_egs=true
@@ -24,7 +24,7 @@ remove_egs=true
 # are just hardcoded at this level, in the commands below.
 train_stage=-10
 tree_affix=  # affix for tree directory, e.g. "a" or "b", in case we change the configuration.
-tdnn_affix=1j  #affix for TDNN directory, e.g. "a" or "b", in case we change the configuration.
+tdnn_affix=1k  #affix for TDNN directory, e.g. "a" or "b", in case we change the configuration.
 common_egs_dir=  # you can set this to use previously dumped egs.
 
 
@@ -44,23 +44,24 @@ where "nvcc" is installed.
 EOF
 fi
 
-local/nnet3/run_xvector_common.sh --stage $stage \
-                                  --mic $mic \
-                                  --nj $nj \
-                                  --min-seg-len $min_seg_len \
-                                  --train-set $train_set \
-                                  --xvector-extractor-dir $xvector_extractor_dir \
-																	--lang-dir data/lang \ 
-																	--gmm $gmm \
-                                  --nnet3-affix "$nnet3_affix"
-exit 1
-# Note: the first stage of the following script is stage 8.
-local/nnet3/prepare_lores_feats.sh --stage $stage \
-                                   --mic $mic \
-                                   --nj $nj \
-                                   --min-seg-len $min_seg_len \
-                                   --use-ihm-ali $use_ihm_ali \
-                                   --train-set $train_set
+if [ $stage -le 15 ]; then
+  local/nnet3/run_xvector_common.sh --stage $stage \
+																		--mic $mic \
+																		--nj $nj \
+																		--min-seg-len $min_seg_len \
+																		--train-set $train_set \
+																		--xvector-extractor-dir $xvector_extractor_dir \
+																		--nnet3-affix "$nnet3_affix"
+fi
+
+if [ $stage -le 18 ]; then
+  local/nnet3/prepare_lores_feats.sh --stage $stage \
+                                     --mic $mic \
+                                     --nj $nj \
+                                     --min-seg-len $min_seg_len \
+                                     --use-ihm-ali $use_ihm_ali \
+                                     --train-set $train_set
+fi
 
 if $use_ihm_ali; then
   gmm_dir=exp/ihm/${ihm_gmm}
@@ -81,7 +82,7 @@ else
 fi
 
 train_data_dir=data/$mic/${train_set}_sp_hires_comb
-train_ivector_dir=exp/$mic/nnet3${nnet3_affix}/ivectors_${train_set}_sp_hires_comb
+train_ivector_dir=exp/$mic/nnet3${nnet3_affix}/xvectors_${train_set}_sp_hires_comb
 final_lm=`cat data/local/lm/final_lm`
 LM=$final_lm.pr1-7
 
@@ -92,7 +93,7 @@ for f in $gmm_dir/final.mdl $lores_train_data_dir/feats.scp \
 done
 
 
-if [ $stage -le 11 ]; then
+if [ $stage -le 19 ]; then
   if [ -f $ali_dir/ali.1.gz ]; then
     echo "$0: alignments in $ali_dir appear to already exist.  Please either remove them "
     echo " ... or use a later --stage option."
@@ -105,7 +106,7 @@ fi
 
 [ ! -f $ali_dir/ali.1.gz ] && echo  "$0: expected $ali_dir/ali.1.gz to exist" && exit 1
 
-if [ $stage -le 12 ]; then
+if [ $stage -le 20 ]; then
   echo "$0: creating lang directory with one state per phone."
   # Create a version of the lang/ directory that has one state per phone in the
   # topo file. [note, it really has two states.. the first one is only repeated
@@ -128,7 +129,7 @@ if [ $stage -le 12 ]; then
   fi
 fi
 
-if [ $stage -le 13 ]; then
+if [ $stage -le 21 ]; then
   # Get the alignments as lattices (gives the chain training more freedom).
   # use the same num-jobs as the alignments
   steps/align_fmllr_lats.sh --nj 100 --cmd "$train_cmd" ${lores_train_data_dir} \
@@ -136,7 +137,7 @@ if [ $stage -le 13 ]; then
   rm $lat_dir/fsts.*.gz # save space
 fi
 
-if [ $stage -le 14 ]; then
+if [ $stage -le 22 ]; then
   # Build a tree using our new topology.  We know we have alignments for the
   # speed-perturbed data (local/nnet3/run_ivector_common.sh made them), so use
   # those.
@@ -152,7 +153,7 @@ fi
 
 xent_regularize=0.1
 
-if [ $stage -le 15 ]; then
+if [ $stage -le 23 ]; then
   echo "$0: creating neural net configs using the xconfig parser";
 
   num_targets=$(tree-info $tree_dir/tree |grep num-pdfs|awk '{print $2}')
@@ -162,13 +163,14 @@ if [ $stage -le 15 ]; then
 
   mkdir -p $dir/configs
   cat <<EOF > $dir/configs/network.xconfig
-  input dim=100 name=ivector
+  #input dim=512 name=ivector
   input dim=40 name=input
 
   # please note that it is important to have input layer with the name=input
   # as the layer immediately preceding the fixed-affine-layer to enable
   # the use of short notation for the descriptor
-  fixed-affine-layer name=lda input=Append(-1,0,1,ReplaceIndex(ivector, t, 0)) affine-transform-file=$dir/configs/lda.mat
+  #fixed-affine-layer name=lda input=Append(-1,0,1,ReplaceIndex(ivector, t, 0)) affine-transform-file=$dir/configs/lda.mat
+  fixed-affine-layer name=lda input=Append(-1,0,1) affine-transform-file=$dir/configs/lda.mat
 
   # the first splicing is moved before the lda layer, so no splicing here
   relu-batchnorm-layer name=tdnn1 dim=450 $opts
@@ -202,7 +204,7 @@ EOF
   steps/nnet3/xconfig_to_configs.py --xconfig-file $dir/configs/network.xconfig --config-dir $dir/configs/
 fi
 
-if [ $stage -le 16 ]; then
+if [ $stage -le 24 ]; then
   if [[ $(hostname -f) == *.clsp.jhu.edu ]] && [ ! -d $dir/egs/storage ]; then
     utils/create_split_dir.pl \
      /export/b0{5,6,7,8}/$USER/kaldi-data/egs/ami-$(date +'%m_%d_%H_%M')/s5b/$dir/egs/storage $dir/egs/storage
@@ -210,7 +212,6 @@ if [ $stage -le 16 ]; then
 
   steps/nnet3/chain/train.py --stage $train_stage \
     --cmd "$decode_cmd" \
-    --feat.online-ivector-dir $train_ivector_dir \
     --feat.cmvn-opts "--norm-means=false --norm-vars=false" \
     --chain.xent-regularize $xent_regularize \
     --chain.leaky-hmm-coefficient 0.1 \
@@ -235,27 +236,28 @@ if [ $stage -le 16 ]; then
     --dir $dir
 fi
 
+    #--feat.online-ivector-dir $train_ivector_dir \
 
 graph_dir=$dir/graph_${LM}
-if [ $stage -le 17 ]; then
+if [ $stage -le 25 ]; then
   # Note: it might appear that this data/lang_chain directory is mismatched, and it is as
   # far as the 'topo' is concerned, but this script doesn't read the 'topo' from
   # the lang directory.
   utils/mkgraph.sh --self-loop-scale 1.0 data/lang_${LM} $dir $graph_dir
 fi
 
-if [ $stage -le 18 ]; then
+if [ $stage -le 26 ]; then
   rm $dir/.error 2>/dev/null || true
   for decode_set in dev eval; do
       (
       steps/nnet3/decode.sh --acwt 1.0 --post-decode-acwt 10.0 \
           --nj $nj --cmd "$decode_cmd" \
-          --online-ivector-dir exp/$mic/nnet3${nnet3_affix}/ivectors_${decode_set}_hires \
           --scoring-opts "--min-lmwt 5 " \
          $graph_dir data/$mic/${decode_set}_hires $dir/decode_${decode_set} || exit 1;
       ) || touch $dir/.error &
   done
   wait
+          #--online-ivector-dir exp/$mic/nnet3${nnet3_affix}/xvectors_${decode_set}_hires \
   if [ -f $dir/.error ]; then
     echo "$0: something went wrong in decoding"
     exit 1

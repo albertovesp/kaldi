@@ -3,7 +3,7 @@
 # This is the 2nd pass of the run_tdnn_1c_1 for 
 # speaker adaptation using s-vectors. It takes
 # the chain model trained in the first pass as the 
-# starting point and uses the first-pass decoding
+# starting point and uses the reference transcripts
 # to train the s-vectors.
 
 set -e
@@ -41,6 +41,7 @@ phone_lm_scales="1,1" # comma-separated list of positive integer multiplicities
 # model and dirs for source model used for transfer learning
 src_mdl=./exp/chain_cleaned/tdnnf_1a/final.mdl # input chain model
 
+src_chain_dir=exp/chain_cleaned/tdnnf_1a
 src_mfcc_config=./conf/mfcc_hires.conf # mfcc config used to extract higher dim
 src_ivec_extractor_dir=exp/nnet3/ivectors_${train_set}_sp_hires # source ivector extractor dir used to extract ivector for
                          # source data and the ivector for target data is extracted using this extractor.
@@ -58,7 +59,6 @@ src_dict=data/local/dict_nosp  # dictionary for source dataset containing lexico
 src_tree_dir=exp/chain_cleaned/tree      # chain tree-dir for src data;
                                          # the alignment in target domain is
                                          # converted using src-tree
-
 xent_regularize=0.1
 # End configuration section.
 
@@ -102,15 +102,11 @@ for f in $required_files; do
 done
 
 if [ $stage -le 3 ]; then
-    # Create onehot ivectors for training and dev data
-  local/nnet3/create_onehot_ivectors.sh  --stage $stage \
-                       --ivector-dir exp/nnet3${nnet3_affix}/ivectors_${train_set}_sp_hires \
-                       --spk2utt data/${train_set}_sp_hires/spk2utt \
-                       --nnet3-affix "$nnet3_affix" || exit 1;
-
+  # Create onehot ivectors and initial matrix for dev data
   local/nnet3/create_onehot_ivectors.sh --stage $stage \
                        --ivector-dir exp/nnet3${nnet3_affix}/ivectors_${test_sets}_hires \
                        --spk2utt data/${test_sets}_hires/spk2utt \
+                       --online-ivector-dir ${backup_ivec_dir}/ivectors_${test_sets}_hires \
                        --nnet3-affix "$nnet3_affix" || exit 1;
 
 fi
@@ -120,13 +116,11 @@ ivec_opt="--online-ivector-dir ${backup_ivec_dir}/ivectors_${test_sets}_hires"
 
 # Copying ivectors across frames
 if [ $stage -le 4 ]; then
-  #local/nnet3/copy_across_frames.sh \
-  #  --dir exp/nnet3${nnet3_affix}/ivectors_${train_set}_sp_hires \
-  #  --data data/${train_set}_sp_hires
 
   local/nnet3/copy_across_frames.sh \
     --dir exp/nnet3${nnet3_affix}/ivectors_${test_sets}_hires \
-    --data data/${test_sets}_hires
+    --data data/${test_sets}_hires \
+    --nnet3-affix ${nnet3_affix}
 fi
 
 if [ $stage -le 5 ]; then
@@ -146,6 +140,7 @@ fi
 # them into 100 dimensional i-vectors.
 if [ $stage -le 6 ]; then
   ivector_dim=$(< data/${test_sets}_hires/spk2utt wc -l)
+  ivector_dir=exp/nnet3${nnet3_affix}/ivectors_${test_sets}_hires
   output_opts="l2-regularize=0.015"
   mkdir -p $dir/configs
 
@@ -160,10 +155,8 @@ if [ $stage -le 6 ]; then
  
   input name=ivector dim=$ivector_dim
  ## adding the layers for chain branch
-  relu-batchnorm-layer name=svector_hidden dim=50 l2-regularize=0.001 input=ivector
-  relu-batchnorm-layer name=svector dim=100 l2-regularize=0.001 target-rms=0.1 input=svector_hidden
+  linear-component name=svector_hidden.affine input=ivector dim=600 matrix=$ivector_dir/initial_ivectors.mat 
 
-  input name=input dim=40
   output-layer name=output include-log-softmax=false dim=$num_targets $output_opts
 EOF
  
@@ -171,6 +164,8 @@ EOF
     --xconfig-file  $dir/configs/network.xconfig  \
     --config-dir $dir/configs/
 fi
+
+cp $src_chain_dir/configs/vars $dir/configs/vars
 
 ## TODO: At present, after this stage, we have to manually edit the final.config
 ## file. This needs to be automated.
@@ -222,12 +217,12 @@ if [ $stage -le 9 ]; then
     --trainer.srand=$srand \
     --trainer.max-param-change=2.0 \
     --trainer.input-model $dir/input.raw \
-    --trainer.num-epochs=20 \
+    --trainer.num-epochs=200 \
     --trainer.frames-per-iter=1500000 \
     --trainer.optimization.num-jobs-initial=2 \
     --trainer.optimization.num-jobs-final=3 \
-    --trainer.optimization.initial-effective-lrate=0.001 \
-    --trainer.optimization.final-effective-lrate=0.0001 \
+    --trainer.optimization.initial-effective-lrate=0.1 \
+    --trainer.optimization.final-effective-lrate=0.01 \
     --trainer.num-chunk-per-minibatch=128 \
     --egs.chunk-width=150 \
     --egs.dir="$common_egs_dir" \

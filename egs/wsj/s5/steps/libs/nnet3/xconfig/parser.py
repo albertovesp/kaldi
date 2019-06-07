@@ -28,6 +28,7 @@ config_to_layer = {
         'relu-batchnorm-so-layer' : xlayers.XconfigBasicLayer,
         'batchnorm-layer' : xlayers.XconfigBasicLayer,
         'batchnorm-so-relu-layer' : xlayers.XconfigBasicLayer,
+        'batchnorm-layer' : xlayers.XconfigBasicLayer,
         'sigmoid-layer' : xlayers.XconfigBasicLayer,
         'tanh-layer' : xlayers.XconfigBasicLayer,
         'fixed-affine-layer' : xlayers.XconfigFixedAffineLayer,

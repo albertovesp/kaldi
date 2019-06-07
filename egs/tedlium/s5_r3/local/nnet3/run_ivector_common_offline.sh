@@ -118,7 +118,7 @@ if [ $stage -le 5 ]; then
   # of each pseudo-speaker).
   temp_data_root=${ivectordir}
 
-  steps/nnet/ivector/extract_ivectors2.sh --cmd "$train_cmd" --nj $nj --stage 4\
+  steps/nnet/ivector/extract_ivectors2.sh --cmd "$train_cmd" --nj $nj \
     data/${train_set}_sp_hires \
     data/lang_chain \
     exp/nnet3${nnet3_affix}/extractor $ivectordir
@@ -134,11 +134,10 @@ if [ $stage -le 5 ]; then
 fi
 
 if [ -f data/${train_set}_sp/feats.scp ] && [ $stage -le 9 ]; then
-  echo "$0: $feats already exists.  Refusing to overwrite the features "
+  echo "$0: feats.scp already exists.  Refusing to overwrite the features "
   echo " to avoid wasting time.  Please remove the file and continue if you really mean this."
   exit 1;
 fi
-
 
 if [ $stage -le 6 ]; then
   echo "$0: preparing directory for low-resolution speed-perturbed data (for alignment)"

@@ -205,9 +205,9 @@ if [ $stage -le 19 ]; then
   lang_dir=data/lang_chain
   ngram_order=4
 
-  for dset in dev test; do
+  for dset in dev; do
     data_dir=data/${dset}_hires
-    decoding_dir=exp/chain_cleaned/tdnnf_1a/decode_${dset}
+    decoding_dir=exp/chain_cleaned/tdnnf_1a_2b/decode
     suffix=$(basename $rnnlm_dir)
     output_dir=${decoding_dir}_$suffix
 

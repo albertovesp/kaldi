@@ -255,7 +255,7 @@ if [ $stage -le 14 ]; then
     fi
   ) &
 fi
-
+exit 1
 if ! $train_discriminative; then
   echo "$0: exiting early since --train-discriminative is false."
   exit 0

@@ -1,4 +1,5 @@
-# Copyright 2018 Zili Huang
+# Copyright 2018 Zili Huangi
+#           2019 Desh Raj
 
 # Apache 2.0
 
@@ -7,10 +8,10 @@ import torch
 import argparse
 import random
 import torch.optim.lr_scheduler as lr_scheduler
-from utils import train, validate, save_checkpoint, record_info, prepare_utt2feat, compute_mean_std
+from utils import train, train_mtl, validate, validate_mtl, save_checkpoint, record_info, prepare_utt2feat, compute_mean_std
 import shutil
-from dataprocess import SPKID_Dataset
-from models.tdnn import tdnn_sid_xvector, tdnn_sid_xvector_1, tdnn_sid_xvector_2
+from dataprocess import SPKID_Dataset, SPKID_Dataset_MTL
+from models.tdnn import tdnn_sid_xvector, tdnn_sid_xvector_1, tdnn_sid_xvector_2, tdnn_sid_xvector_multi
 from models.metrics import *
 from models.focal_loss import *
 import numpy as np
@@ -116,7 +117,9 @@ def main():
         raise ValueError("Metric function not defined.")
 
     # prepare utt2feat
-    utt2feat = prepare_utt2feat(args.data_dir) 
+    utt2feat = prepare_utt2feat(args.data_dir)
+    if(use_multi):
+        utt2feat_clean = prepare_utt2feat(args.clean_data_dir)
 
     # load mean and std
     if os.path.exists("{}/mean.npy".format(args.train_egs_dir)) and os.path.exists("{}/std.npy".format(args.train_egs_dir)):
@@ -133,7 +136,10 @@ def main():
 
     # model
     if args.arch == 'tdnn':
-        model = tdnn_sid_xvector(args.feat_dim) 
+        if(!use_multi):
+            model = tdnn_sid_xvector(args.feat_dim)
+        else:
+            model = tdnn_sid_xvector_multi(args.feat_dim)
     elif args.arch == 'tdnn1':
         model = tdnn_sid_xvector_1(args.feat_dim) 
     elif args.arch == 'tdnn2':
@@ -186,7 +192,10 @@ def main():
     valset_list = []
     for subfile in range(1, 1 + args.valid_num_egs):
         valid_egs_filename = "{}/valid_egs.{}.scp".format(args.valid_egs_dir, subfile)
-        valset = SPKID_Dataset(valid_egs_filename, mean, std, utt2feat)
+        if (use_multi):
+            valset = SPKID_Dataset_MTL(valid_egs_filename, mean, std, utt2feat, utt2feat_clean)
+        else:
+            valset = SPKID_Dataset(valid_egs_filename, mean, std, utt2feat)
         valset_list.append(valset)
     sys.stdout.flush()
 
@@ -206,16 +215,25 @@ def main():
                 continue
             # training
             egs_filename = "{}/egs.{}.scp".format(args.train_egs_dir, subfile)
-            trainset = SPKID_Dataset(egs_filename, mean, std, utt2feat)
+            if (use_multi):
+                trainset = SPKID_Dataset_MTL(egs_filename, mean, std, utt2feat, utt2feat_clean)
+            else:
+                trainset = SPKID_Dataset(egs_filename, mean, std, utt2feat)
             trainloader = torch.utils.data.DataLoader(trainset, num_workers=args.num_workers, 
                     batch_size=args.batch_size, pin_memory=True, shuffle=True)
-            train_info = train(trainloader, model, device, criterion, metric_fc, optimizer, args)
+            if(use_multi):
+                train_info = train_mtl(trainloader, model, device, criterion, metric_fc, optimizer, args)
+            else:
+                train_info = train(trainloader, model, device, criterion, metric_fc, optimizer, args)
             print("Train -- Iter: {:04d}, LR: {:.6f}, Loss: {:.4f}, Acc@1: {:.3f}, Acc@5: {:.3f}".format(
                 iterations, optimizer.param_groups[0]['lr'], train_info['loss'], train_info['top1'], train_info['top5']))
             sys.stdout.flush()
 
             # validation
-            dev_info = validate(valset_list, model, device, criterion, metric_fc, args)
+            if(use_multi):
+                dev_info = validate_mtl(valset_list, model, device, criterion, metric_fc, args)
+            else:
+                dev_info = validate(valset_list, model, device, criterion, metric_fc, args)
             print('Valid Loss: {:.4f}, Acc@1: {:.3f}, Acc@5: {:.3f}'.format(dev_info['loss'], dev_info['top1'], dev_info['top5']))
             sys.stdout.flush()
             val_acc = dev_info['top1']

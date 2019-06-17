@@ -72,6 +72,40 @@ def train(train_loader, model, device, criterion, metric_fc, optimizer, args):
     info = {'loss': losses.avg, 'top1': top1.avg, 'top5': top5.avg}
     return info
 
+def train_mtl(train_loader, model, device, criterion, metric_fc, optimizer, args):
+    losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
+
+    # switch to train mode
+    model.train()
+
+    for i, (input, target, clean_input) in enumerate(train_loader, 1):
+        input, target = input.to(device), target.to(device)
+        #input = input.transpose(0, 1) # (T, N, F)
+
+        # compute output
+        embedding_a, embedding_b, y = model(input)
+        output, cosine = metric_fc(embedding_b, target)
+
+        criterion_mtl = torch.nn.MSELoss()
+        reconstruction_loss = criterion_mtl(clean_input, y)
+        prediction_loss = criterion(output, target)
+        loss = reconstruction_loss + prediction_loss
+
+        # measure accuracy and record loss
+        acc1, acc5 = compute_accuracy(cosine, target, topk=(1, 5))
+        losses.update(loss.item(), target.size(0))
+        top1.update(acc1[0], target.size(0))
+        top5.update(acc5[0], target.size(0))
+
+        # compute gradient and do SGD step
+        optimizer.zero_grad()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), args.clip_value)
+        optimizer.step()
+
+    info = {'loss': losses.avg, 'top1': top1.avg, 'top5': top5.avg}
+    return info
+
 def validate(valset_list, model, device, criterion, metric_fc, args):
     losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
 
@@ -91,6 +125,38 @@ def validate(valset_list, model, device, criterion, metric_fc, args):
                 output, cosine = metric_fc(embedding_b, target)
 
                 loss = criterion(output, target)
+
+                # measure accuracy and record loss
+                acc1, acc5 = compute_accuracy(cosine, target, topk=(1, 5))
+                losses.update(loss.item(), target.size(0))
+                top1.update(acc1[0], target.size(0))
+                top5.update(acc5[0], target.size(0))
+
+    info = {'loss': losses.avg, 'top1': top1.avg, 'top5': top5.avg}
+    return info
+
+def validate_mtl(valset_list, model, device, criterion, metric_fc, args):
+    losses, top1, top5 = AverageMeter(), AverageMeter(), AverageMeter()
+
+    # switch to evaluate mode
+    model.eval()
+
+    with torch.no_grad():
+        for valset in valset_list:
+            val_loader = torch.utils.data.DataLoader(valset, num_workers=args.num_workers,
+                    batch_size=args.batch_size, pin_memory=True, shuffle=False)
+            for i, (input, target, clean_input) in enumerate(val_loader, 1):
+                input, target = input.to(device), target.to(device)
+                #input = input.transpose(0, 1) # (T, N, F)
+
+                # compute output
+                embedding_a, embedding_b, y = model(input)
+                output, cosine = metric_fc(embedding_b, target)
+                
+                criterion_mtl = torch.nn.MSELoss()
+                reconstruction_loss = criterion_mtl(clean_input, y)
+                prediction_loss = criterion(output, target)
+                loss = reconstruction_loss + prediction_loss
 
                 # measure accuracy and record loss
                 acc1, acc5 = compute_accuracy(cosine, target, topk=(1, 5))

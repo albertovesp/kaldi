@@ -37,6 +37,41 @@ class SPKID_Dataset(Dataset):
         assert self.mean is not None and self.std is not None
         feat = (feat - self.mean) / self.std
         return feat, self.label_list[idx]
+ 
+class SPKID_Dataset_MTL(Dataset):
+    """Speaker verification dataset with multi-task (speech enhancement)."""
+    def __init__(self, egs_file, mean, std, utt2feat, utt2clean):
+        self.mean, self.std, self.utt2feat, self.utt2clean = mean, std, utt2feat, utt2clean
+        self.feat_list, self.label_list, self.clean_feat_list, self.start_frame_list, self.duration = self.read_egs_file(egs_file)
+
+    def read_egs_file(self, egs_file):
+        with open(egs_file, 'r') as fh:
+            content = fh.readlines()
+        feat_list, label_list, clean_feat_list, start_frame_list, duration_list = [], [], [], [], []
+        for line in zip(content):
+            line = line.strip('\n')
+            egs_info = line.split()[0]
+            egs_info_split = egs_info.split('-')
+            uttname, start_frame, duration, spk_idx = '-'.join(egs_info_split[:-3]), int(egs_info_split[-3]), int(egs_info_split[-2]), int(egs_info_split[-1])
+
+            feat_list.append(self.utt2feat[uttname])
+            clean_feat_list.append(self.utt2clean[uttname])
+            label_list.append(spk_idx)
+            start_frame_list.append(start_frame)
+            duration_list.append(duration)
+        assert np.max(duration_list) == np.min(duration_list)
+        duration = np.max(duration_list)
+        return feat_list, label_list, clean_feat_list, start_frame_list, duration
+
+    def __len__(self):
+        return len(self.feat_list)
+
+    def __getitem__(self, idx):
+        feat = kaldi_io.read_mat(self.feat_list[idx])[self.start_frame_list[idx] : self.start_frame_list[idx] + self.duration, :]
+        clean_feat = kaldi_io.read_mat(self.clean_feat_list[idx])[self.start_frame_list[idx] : self.start_frame_list[idx] + self.duration, :]
+        assert self.mean is not None and self.std is not None
+        feat = (feat - self.mean) / self.std
+        return feat, self.label_list[idx], clean_feat
 
 class SPKID_Dataset_EVAL(Dataset):
     """Speaker verification dataset for evaluation."""

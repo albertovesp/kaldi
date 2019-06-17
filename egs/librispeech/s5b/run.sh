@@ -23,7 +23,7 @@ vaddir=`pwd`/mfcc
 
 
 data=/export/a15/vpanayotov/data
-nnet_dir=exp/xvector_rir_nnet_1b
+nnet_dir=exp/xvector_rir_nnet_1c
 
 # base url for downloads.
 data_url=www.openslr.org/resources/12

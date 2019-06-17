@@ -102,4 +102,4 @@ ${cuda_cmd} --gpu ${ngpu} $nnet_dir/log/train.log \
 CUDA_VISIBLE_DEVICES=`free-gpu -n 1`  python scripts/train.py --data_dir $data --train_num_egs $train_num_egs --valid_num_egs $valid_num_egs \
 	--clean_data_dir $clean_data --epochs $epochs --batch_size $batch_size --loss $loss --metric $metric --optimizer $optimizer --lr $lr \
 	--arch $arch --feat_dim $feat_dim --num_classes $num_classes --multi_gpu $ngpu --seed $seed --num_workers $num_workers \
-	--use_relu $use_relu --train_egs_dir $egs_dir --valid_egs_dir $egs_dir --use_tfb $nnet_dir 
+	--use_relu $use_relu --train_egs_dir $egs_dir --valid_egs_dir $egs_dir --use_tfb --use_multi $nnet_dir 

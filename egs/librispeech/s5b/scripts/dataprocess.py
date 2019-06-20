@@ -48,7 +48,7 @@ class SPKID_Dataset_MTL(Dataset):
         with open(egs_file, 'r') as fh:
             content = fh.readlines()
         feat_list, label_list, clean_feat_list, start_frame_list, duration_list = [], [], [], [], []
-        for line in zip(content):
+        for line in content:
             line = line.strip('\n')
             egs_info = line.split()[0]
             egs_info_split = egs_info.split('-')

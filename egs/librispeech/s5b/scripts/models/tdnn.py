@@ -123,18 +123,18 @@ class TDNN_SID(nn.Module):
         return embedding_a, embedding_b
 
 class TDNN_SID_MULTI(nn.Module):
-    def __init__(self, in_dim, num_layers, hidden_dims, kernel_sizes, dilations, hidden_dims_multi):
-        super(TDNN_SID, self).__init__()
+    def __init__(self, in_dim, num_layers, hidden_dims, kernel_sizes, dilations):
+        super(TDNN_SID_MULTI, self).__init__()
         assert len(hidden_dims) == num_layers
         assert len(kernel_sizes) == num_layers
         assert len(dilations) == num_layers
         self.num_layers = num_layers
         self.tdnn_layers = self._make_layer(
             in_dim, hidden_dims, kernel_sizes, dilations)
-        hidden_dims2 = hidden_dims[:-1].reverse()
+        hidden_dims2 = list(reversed(hidden_dims))[1:]
         hidden_dims2.append(in_dim)
         self.tdnn_layers_deconv = self._make_layer(
-            hidden_dims[-1], hidden_dims2, kernel_sizes.reverse(), dilations.reverse(), deconv=True)
+            hidden_dims[-1], hidden_dims2, list(reversed(kernel_sizes)), list(reversed(dilations)), deconv=True)
         self.fc1 = nn.Linear(hidden_dims[-1] * 2, 512)
         self.bn1 = nn.BatchNorm1d(512)
         self.fc2 = nn.Linear(512, 512)
@@ -161,12 +161,12 @@ class TDNN_SID_MULTI(nn.Module):
         x = self.tdnn_layers(x) # (N, D1, T)
         mean_vec = torch.mean(x, 2) # (N, D1)
         std_vec = torch.std(x, 2) # (N, D1)
-        y = self.tdnn_layers_deconv(x) # (N, T, F)
+        y = self.tdnn_layers_deconv(x).permute(0, 2, 1) # (N, T, F)
         out_dim = y.size()
         x = torch.cat((mean_vec, std_vec), 1) # (N, 2D1)
         embedding_a = self.fc1(x) # (N, D2) 
         x = F.relu(self.bn1(embedding_a), inplace=True)
-        embedding_b = self.fc2(x) 
+        embedding_b = self.fc2(x)
         assert in_dim == out_dim
         return embedding_a, embedding_b, y
 

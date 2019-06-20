@@ -8,9 +8,13 @@ import shutil
 import kaldi_io
 import random
 
-def prepare_utt2feat(data_dir):
+def prepare_utt2feat(data_dir, clean=False):
     utt2feat = {}
-    with open("{}/feats.scp".format(data_dir), 'r') as fh:
+    if (clean):
+        file = "{}/clean_feats.scp".format(data_dir)
+    else:
+        file = "{}/feats.scp".format(data_dir)
+    with open(file, 'r') as fh:
         content = fh.readlines()
     for line in content:
         line = line.strip('\n')

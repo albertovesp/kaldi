@@ -49,7 +49,6 @@ if [ $stage -le 11 ] & [ ! -z $clean_data ]; then
     cut -d " " -f 2,3 | sort -k1 > $data/clean_feats.scp
   rm $rir_uttid
   rm $clean_uttid 
-  
 fi
 
 num_pdfs=$(awk '{print $2}' $data/utt2spk | sort | uniq -c | wc -l)

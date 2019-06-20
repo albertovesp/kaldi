@@ -118,8 +118,8 @@ def main():
 
     # prepare utt2feat
     utt2feat = prepare_utt2feat(args.data_dir)
-    if(use_multi):
-        utt2feat_clean = prepare_utt2feat(args.clean_data_dir)
+    if(args.use_multi):
+        utt2feat_clean = prepare_utt2feat(args.data_dir, clean=True)
 
     # load mean and std
     if os.path.exists("{}/mean.npy".format(args.train_egs_dir)) and os.path.exists("{}/std.npy".format(args.train_egs_dir)):
@@ -136,10 +136,10 @@ def main():
 
     # model
     if args.arch == 'tdnn':
-        if(!use_multi):
-            model = tdnn_sid_xvector(args.feat_dim)
-        else:
+        if (args.use_multi):
             model = tdnn_sid_xvector_multi(args.feat_dim)
+        else:
+            model = tdnn_sid_xvector(args.feat_dim)
     elif args.arch == 'tdnn1':
         model = tdnn_sid_xvector_1(args.feat_dim) 
     elif args.arch == 'tdnn2':
@@ -192,7 +192,7 @@ def main():
     valset_list = []
     for subfile in range(1, 1 + args.valid_num_egs):
         valid_egs_filename = "{}/valid_egs.{}.scp".format(args.valid_egs_dir, subfile)
-        if (use_multi):
+        if (args.use_multi):
             valset = SPKID_Dataset_MTL(valid_egs_filename, mean, std, utt2feat, utt2feat_clean)
         else:
             valset = SPKID_Dataset(valid_egs_filename, mean, std, utt2feat)
@@ -215,13 +215,13 @@ def main():
                 continue
             # training
             egs_filename = "{}/egs.{}.scp".format(args.train_egs_dir, subfile)
-            if (use_multi):
+            if (args.use_multi):
                 trainset = SPKID_Dataset_MTL(egs_filename, mean, std, utt2feat, utt2feat_clean)
             else:
                 trainset = SPKID_Dataset(egs_filename, mean, std, utt2feat)
             trainloader = torch.utils.data.DataLoader(trainset, num_workers=args.num_workers, 
                     batch_size=args.batch_size, pin_memory=True, shuffle=True)
-            if(use_multi):
+            if(args.use_multi):
                 train_info = train_mtl(trainloader, model, device, criterion, metric_fc, optimizer, args)
             else:
                 train_info = train(trainloader, model, device, criterion, metric_fc, optimizer, args)
@@ -230,7 +230,7 @@ def main():
             sys.stdout.flush()
 
             # validation
-            if(use_multi):
+            if(args.use_multi):
                 dev_info = validate_mtl(valset_list, model, device, criterion, metric_fc, args)
             else:
                 dev_info = validate(valset_list, model, device, criterion, metric_fc, args)

@@ -1,1 +1,1 @@
-tuning/run_tdnn_1i.sh
+local/chain/tuning/run_tdnn_1j.sh

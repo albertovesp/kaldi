@@ -112,7 +112,7 @@ fi
 if [ $stage -le 15 ]; then
   # having a larger number of speakers is helpful for generalization, and to
   # handle per-utterance decoding well (iVector starts at zero).
-  ivectordir=exp/$mic/nnet3${nnet3_affix}/xvectors_${train_set}_sp_hires_comb
+  ivectordir=exp/$mic/nnet3${nnet3_affix}/xvectors_utt_${train_set}_sp_hires_comb
   if [[ $(hostname -f) == *.clsp.jhu.edu ]] && [ ! -d $ivectordir/storage ]; then
     utils/create_split_dir.pl /export/b0{5,6,7,8}/$USER/kaldi-data/ivectors/ami-$mic-$(date +'%m_%d_%H_%M')/s5/$ivectordir/storage $ivectordir/storage
   fi
@@ -122,16 +122,16 @@ if [ $stage -le 15 ]; then
   utils/data/modify_speaker_info.sh --utts-per-spk-max 2 \
     data/${mic}/${train_set}_sp_hires_comb ${temp_data_root}/${train_set}_sp_hires_comb_max2
 
-  steps/online/nnet2/extract_xvectors.sh --cmd "$train_cmd" --nj 20 \
+  steps/online/nnet2/extract_xvectors.sh --cmd "$train_cmd" --nj 20 --per-spk false \
     $xvector_extractor_dir ${temp_data_root}/${train_set}_sp_hires_comb_max2 \
     $ivectordir
 
   # Also extract iVectors for the test data, but in this case we don't need the speed
   # perturbation (sp).
   for data in dev eval; do
-    steps/online/nnet2/extract_xvectors.sh --cmd "$train_cmd" --nj 20 \
+    steps/online/nnet2/extract_xvectors.sh --cmd "$train_cmd" --nj 20 --per-spk false \
       $xvector_extractor_dir data/$mic/${data}_hires \
-      exp/$mic/nnet3${nnet3_affix}/xvectors_${data}_hires
+      exp/$mic/nnet3${nnet3_affix}/xvectors_utt_${data}_hires
   done
 fi
 

@@ -24,7 +24,7 @@ remove_egs=true
 # are just hardcoded at this level, in the commands below.
 train_stage=-10
 tree_affix=  # affix for tree directory, e.g. "a" or "b", in case we change the configuration.
-tdnn_affix=1k  #affix for TDNN directory, e.g. "a" or "b", in case we change the configuration.
+tdnn_affix=1l  #affix for TDNN directory, e.g. "a" or "b", in case we change the configuration.
 common_egs_dir=  # you can set this to use previously dumped egs.
 
 
@@ -82,7 +82,7 @@ else
 fi
 
 train_data_dir=data/$mic/${train_set}_sp_hires_comb
-train_ivector_dir=exp/$mic/nnet3${nnet3_affix}/xvectors_${train_set}_sp_hires_comb
+train_ivector_dir=exp/$mic/nnet3${nnet3_affix}/xvectors_utt_${train_set}_sp_hires_comb
 final_lm=`cat data/local/lm/final_lm`
 LM=$final_lm.pr1-7
 
@@ -163,14 +163,14 @@ if [ $stage -le 23 ]; then
 
   mkdir -p $dir/configs
   cat <<EOF > $dir/configs/network.xconfig
-  #input dim=512 name=ivector
+  input dim=512 name=ivector
   input dim=40 name=input
 
   # please note that it is important to have input layer with the name=input
   # as the layer immediately preceding the fixed-affine-layer to enable
   # the use of short notation for the descriptor
-  #fixed-affine-layer name=lda input=Append(-1,0,1,ReplaceIndex(ivector, t, 0)) affine-transform-file=$dir/configs/lda.mat
-  fixed-affine-layer name=lda input=Append(-1,0,1) affine-transform-file=$dir/configs/lda.mat
+  fixed-affine-layer name=lda input=Append(-1,0,1,ReplaceIndex(ivector, t, 0)) affine-transform-file=$dir/configs/lda.mat
+  #fixed-affine-layer name=lda input=Append(-1,0,1) affine-transform-file=$dir/configs/lda.mat
 
   # the first splicing is moved before the lda layer, so no splicing here
   relu-batchnorm-layer name=tdnn1 dim=450 $opts
@@ -231,12 +231,12 @@ if [ $stage -le 24 ]; then
     --trainer.max-param-change 2.0 \
     --cleanup.remove-egs $remove_egs \
     --feat-dir $train_data_dir \
+    --feat.online-ivector-dir $train_ivector_dir \
     --tree-dir $tree_dir \
     --lat-dir $lat_dir \
     --dir $dir
 fi
 
-    #--feat.online-ivector-dir $train_ivector_dir \
 
 graph_dir=$dir/graph_${LM}
 if [ $stage -le 25 ]; then
@@ -252,12 +252,12 @@ if [ $stage -le 26 ]; then
       (
       steps/nnet3/decode.sh --acwt 1.0 --post-decode-acwt 10.0 \
           --nj $nj --cmd "$decode_cmd" \
+          --online-ivector-dir exp/$mic/nnet3${nnet3_affix}/xvectors_utt_${decode_set}_hires \
           --scoring-opts "--min-lmwt 5 " \
          $graph_dir data/$mic/${decode_set}_hires $dir/decode_${decode_set} || exit 1;
       ) || touch $dir/.error &
   done
   wait
-          #--online-ivector-dir exp/$mic/nnet3${nnet3_affix}/xvectors_${decode_set}_hires \
   if [ -f $dir/.error ]; then
     echo "$0: something went wrong in decoding"
     exit 1

@@ -29,6 +29,8 @@ sub_speaker_frames=0  # If >0, during iVector estimation we split each speaker
                       # e.g. set this to 1000, and it will require at least 10 seconds
                       # of speech per sub-speaker.
 use_gpu=false
+per_spk=true # If true, the script extracts xvectors per speaker instead of per
+             # utterance, like offline i-vectors.
 stage=0
 
 echo "$0 $@"  # Print the command line for logging
@@ -106,7 +108,7 @@ if [ $stage -le 1 ]; then
   for j in $(seq $nj); do cat $dir/xvector.$j.scp; done >$dir/ivector_online.scp || exit 1;
 fi
 
-if [ $stage -le 2 ]; then
+if [ $stage -le 2 ] & [ "$per_spk" ]; then
   # Average the utterance-level xvectors to get speaker-level xvectors.
   echo "$0: computing mean of xvectors for each speaker"
   $cmd JOB=1:$nj $dir/log/speaker_mean.JOB.log \
@@ -118,7 +120,7 @@ this_sdata=$data/split$nj/
 # get an utterance-level set of iVectors (just duplicate the speaker-level ones).
 # note: if $this_sdata is set $dir/split$nj, then these won't be real speakers, they'll
 # be "sub-speakers" (speakers split up into multiple utterances).
-if [ $stage -le 3 ]; then
+if [ $stage -le 3 ] & [ "$per_spk" ]; then
   for j in $(seq $nj); do
     utils/apply_map.pl -f 2 $dir/ivectors_spk.$j.ark <$this_sdata/$j/utt2spk >$dir/ivectors_utt.$j.ark || exit 1;
   done
@@ -137,8 +139,13 @@ if [ $stage -le 4 ]; then
   # here, we are just using the original features in $sdata/JOB/feats.scp for
   # their number of rows; we use the select-feats command to remove those
   # features and retain only the iVector features.
+  if [ "$per_spk" ]; then
+    xvec=ivectors_utt
+  else
+    xvec=xvector
+  fi
   $cmd JOB=1:$nj $dir/log/duplicate_feats.JOB.log \
-    append-vector-to-feats scp:$sdata/feats.scp ark:$dir/ivectors_utt.JOB.ark ark:- \| \
+    append-vector-to-feats scp:$sdata/feats.scp ark:$dir/$xvec.JOB.ark ark:- \| \
     select-feats "$start_dim-$end_dim" ark:- ark:- \| \
     subsample-feats --n=$ivector_period ark:- ark:- \| \
     copy-feats --compress=$compress ark:- \

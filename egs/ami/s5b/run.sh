@@ -18,6 +18,8 @@ mic=ihm
 # Train systems,
 nj=30 # number of parallel jobs,
 stage=1
+train_stage=-10 # for the chain script
+
 . utils/parse_options.sh
 
 base_mic=$(echo $mic | sed 's/[0-9]//g') # sdm, ihm or mdm
@@ -164,10 +166,12 @@ if [ $stage -le 10 ]; then
   local/run_cleanup_segmentation.sh --mic $mic
 fi
 
-if [ $stage -le 18 ]; then
+# Stages 11 to 25 are handled in the following script
+if [ $stage -le 26 ]; then
   ali_opt=
   [ "$mic" != "ihm" ] && ali_opt="--use-ihm-ali true"
-  local/chain/tuning/run_tdnn_1j.sh $ali_opt --mic $mic --stage $stage
+  local/chain/tuning/run_tdnn_1j.sh $ali_opt --mic $mic --stage $stage \
+    --train-stage $train_stage
 fi
 
 #if [ $stage -le 12 ]; then

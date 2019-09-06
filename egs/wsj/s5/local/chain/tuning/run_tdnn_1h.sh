@@ -23,7 +23,7 @@ xvector_extractor=exp/extractors/xvector_vox_${xvector_dim}
 nnet3_affix=       # affix for exp dirs, e.g. it was _cleaned in tedlium.
 
 # Options which are not passed through to run_ivector_common.sh
-affix=1h2   #affix for TDNN+LSTM directory e.g. "1a" or "1b", in case we change the configuration.
+affix=1h3   #affix for TDNN+LSTM directory e.g. "1a" or "1b", in case we change the configuration.
 common_egs_dir=
 reporting_email=
 
@@ -68,7 +68,7 @@ local/nnet3/run_xvector_common.sh \
   --train-set ${train_set} \
   --test-sets "${test_sets}" \
   --xvector-dim $xvector_dim 
-exit 1
+
 
 gmm_dir=exp/${gmm}
 ali_dir=exp/${gmm}_ali_${train_set}_sp
@@ -156,7 +156,7 @@ if [ $stage -le 7 ]; then
 
   mkdir -p $dir/configs
   cat <<EOF > $dir/configs/network.xconfig
-  input dim=512 name=ivector
+  input dim=128 name=ivector
   input dim=40 name=input
 
   # please note that it is important to have input layer with the name=input
@@ -191,7 +191,7 @@ EOF
 fi
 
 
-if [ $stage -le 16 ]; then
+if [ $stage -le 8 ]; then
   if [[ $(hostname -f) == *.clsp.jhu.edu ]] && [ ! -d $dir/egs/storage ]; then
     utils/create_split_dir.pl \
      /export/b0{3,4,5,6}/$USER/kaldi-data/egs/wsj-$(date +'%m_%d_%H_%M')/s5/$dir/egs/storage $dir/egs/storage
@@ -232,7 +232,7 @@ if [ $stage -le 16 ]; then
     --dir=$dir  || exit 1;
 fi
 
-if [ $stage -le 17 ]; then
+if [ $stage -le 9 ]; then
   # The reason we are using data/lang here, instead of $lang, is just to
   # emphasize that it's not actually important to give mkgraph.sh the
   # lang directory with the matched topology (since it gets the
@@ -253,7 +253,7 @@ if [ $stage -le 17 ]; then
     $tree_dir $tree_dir/graph_bd_tgpr || exit 1;
 fi
 
-if [ $stage -le 18 ]; then
+if [ $stage -le 10 ]; then
   frames_per_chunk=$(echo $chunk_width | cut -d, -f1)
   rm $dir/.error 2>/dev/null || true
 

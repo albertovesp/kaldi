@@ -32,6 +32,7 @@ sub_speaker_frames=0  # If >0, during iVector estimation we split each speaker
 use_gpu=false
 per_spk=true # If true, the script extracts xvectors per speaker instead of per
              # utterance, like offline i-vectors.
+length_normalize=false
 stage=0
 
 echo "$0 $@"  # Print the command line for logging
@@ -51,6 +52,7 @@ if [ $# != 3 ]; then
   echo "  --cache-capacity <n|64>                          # To speed-up xvector extraction"
   echo "  --chunk-size <n|-1>                              # If provided, extracts embeddings with specified"
   echo "                                                   # chunk size, and averages to produce final embedding"
+  echo "  --length-normalize <bool|false>                  # If true, normalize x-vectors by length"
 fi
 
 srcdir=$1
@@ -145,12 +147,22 @@ if [ $stage -le 4 ]; then
   else
     xvec=xvector
   fi
-  $cmd JOB=1:$nj $dir/log/duplicate_feats.JOB.log \
-    append-vector-to-feats scp:$sdata/feats.scp ark:$dir/$xvec.JOB.ark ark:- \| \
-    select-feats "$start_dim-$end_dim" ark:- ark:- \| \
-    subsample-feats --n=$ivector_period ark:- ark:- \| \
-    copy-feats --compress=$compress ark:- \
-    ark,scp:$absdir/ivector_online.JOB.ark,$absdir/ivector_online.JOB.scp || exit 1;
+  if [ "$length_normalize" ]; then
+    $cmd JOB=1:$nj $dir/log/duplicate_feats.JOB.log \
+      ivector-normalize-length ark:$dir/$xvec.JOB.ark ark:- \| \
+      append-vector-to-feats scp:$sdata/feats.scp ark:- ark:- \| \
+      select-feats "$start_dim-$end_dim" ark:- ark:- \| \
+      subsample-feats --n=$ivector_period ark:- ark:- \| \
+      copy-feats --compress=$compress ark:- \
+      ark,scp:$absdir/ivector_online.JOB.ark,$absdir/ivector_online.JOB.scp || exit 1;
+  else
+    $cmd JOB=1:$nj $dir/log/duplicate_feats.JOB.log \
+      append-vector-to-feats scp:$sdata/feats.scp ark:$dir/$xvec.JOB.ark ark:- \| \
+      select-feats "$start_dim-$end_dim" ark:- ark:- \| \
+      subsample-feats --n=$ivector_period ark:- ark:- \| \
+      copy-feats --compress=$compress ark:- \
+      ark,scp:$absdir/ivector_online.JOB.ark,$absdir/ivector_online.JOB.scp || exit 1;
+  fi
 fi
 
 if [ $stage -le 5 ]; then

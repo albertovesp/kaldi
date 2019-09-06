@@ -328,8 +328,7 @@ def generate_reverberated_wav_scp(wav_scp,  # a dictionary whose values are the 
                                isotropic_noise_addition_probability, # Probability of adding isotropic noises
                                pointsource_noise_addition_probability, # Probability of adding point-source noises
                                max_noises_per_minute, # maximum number of point-source noises that can be added to a recording according to its duration
-                               store_rir_ids, # store rir ids and room ids for reverberated utterances
-                               label_type  # choose room ID or RIR ID for label type
+                               store_rir_ids # store rir ids and room ids for reverberated utterances
                                ):
     """ This is the main function to generate pipeline command for the corruption
         The generic command of wav-reverberate will be like:
@@ -376,12 +375,8 @@ def generate_reverberated_wav_scp(wav_scp,  # a dictionary whose values are the 
                 wav_corrupted_pipe = "{0} wav-reverberate --shift-output={1} {2} - - |".format(wav_original_pipe, shift_output, reverberate_opts)
 
             if (store_rir_ids == 'true'):
-                if (label_type == 'room'):
-                    new_recording_id = get_new_id(recording_id, room_id, i)
-                    utt2spk[new_recording_id] = room_id
-                else:
-                    new_recording_id = get_new_id(recording_id, rir_id, i) 
-                    utt2spk[new_recording_id] = rir_id    
+                new_recording_id = get_new_id(recording_id, rir_id, i) 
+                utt2spk[new_recording_id] = rir_id    
             else:
                 new_recording_id = get_new_id(recording_id, prefix, i)
             corrupted_wav_scp[new_recording_id] = wav_corrupted_pipe
@@ -428,8 +423,7 @@ def create_reverberated_copy(input_dir,
                            isotropic_noise_addition_probability, # Probability of adding isotropic noises
                            pointsource_noise_addition_probability, # Probability of adding point-source noises
                            max_noises_per_minute,  # maximum number of point-source noises that can be added to a recording according to its duration
-                           store_rir_ids,  # store the RIR ids used for creating the augmented copies
-                           label_type  # choose between room ID or RIR ID for the label (only for RIR xvector recipes)
+                           store_rir_ids  # store the RIR ids used for creating the augmented copies
                            ):
     """ This function creates multiple copies of the necessary files,
         e.g. utt2spk, wav.scp ...
@@ -447,7 +441,7 @@ def create_reverberated_copy(input_dir,
     generate_reverberated_wav_scp(wav_scp, durations, output_dir, room_dict, pointsource_noise_list, iso_noise_dict,
                foreground_snr_array, background_snr_array, num_replicas, include_original, prefix,
                speech_rvb_probability, shift_output, isotropic_noise_addition_probability,
-               pointsource_noise_addition_probability, max_noises_per_minute, store_rir_ids, label_type)
+               pointsource_noise_addition_probability, max_noises_per_minute, store_rir_ids)
 
     if (store_rir_ids == 'false'):
         add_prefix_to_fields(input_dir + "/utt2spk", output_dir + "/utt2spk", num_replicas, include_original, prefix, field = [0,1])

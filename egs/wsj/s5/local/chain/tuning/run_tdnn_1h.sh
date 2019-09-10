@@ -1,11 +1,26 @@
 #!/bin/bash
 
-# 1h is as 1g but uses x-vectors for speaker adaptation
-# instead of i-vectors.
+# 1h is as 1g but replaces the LDA layer at the input of the
+# network with traditional delta and delta-delta features.
 
-# local/chain/compare_wer.sh exp/chain/tdnn1f_sp exp/chain/tdnn1g_sp
+# local/chain/compare_wer.sh exp/chain/tdnn1g_sp exp/chain/tdnn1h2_sp/ exp/chain/tdnn1h_sp/
+# System                tdnn1g_sp tdnn1h_sp
+#WER dev93 (tgpr)                6.87      6.75
+#WER dev93 (tg)                  6.66      6.70
+#WER dev93 (big-dict,tgpr)       4.77      4.60
+#WER dev93 (big-dict,fg)         4.29      4.40
+#WER eval92 (tgpr)               4.63      4.71
+#WER eval92 (tg)                 4.36      4.41
+#WER eval92 (big-dict,tgpr)      2.71      2.96
+#WER eval92 (big-dict,fg)        2.39      2.39
+# Final train prob        -0.0419   -0.0424
+# Final valid prob        -0.0540   -0.0534
+# Final train prob (xent)   -0.6582   -0.6583
+# Final valid prob (xent)   -0.7220   -0.7281
+# Num-params                 8364672   8364672
 
-# steps/info/chain_dir_info.pl exp/chain/tdnn1g_sp
+# steps/info/chain_dir_info.pl exp/chain/tdnn1h_sp
+# exp/chain/tdnn1h_sp: num-iters=108 nj=2..8 num-params=8.4M dim=40+100->2880 combine=-0.044->-0.044 (over 2) xent:train/valid[71,107,final]=(-0.863,-0.648,-0.658/-0.932,-0.719,-0.728) logprob:train/valid[71,107,final]=(-0.065,-0.043,-0.042/-0.073,-0.055,-0.053)
 
 set -e -o pipefail
 
@@ -14,16 +29,21 @@ set -e -o pipefail
 stage=0
 nj=30
 train_set=train_si284
-test_sets='test_dev93 test_eval92'
+test_sets="test_dev93 test_eval92"
 gmm=tri4b        # this is the source gmm-dir that we'll use for alignments; it
                  # should have alignments for the specified training data.
 
-xvector_dim=128
-xvector_extractor=exp/extractors/xvector_vox_${xvector_dim}
+num_threads_ubm=8
+
+nj_extractor=10
+# It runs a JOB with '-pe smp N', where N=$[threads*processes]
+num_threads_extractor=4
+num_processes_extractor=2
+
 nnet3_affix=       # affix for exp dirs, e.g. it was _cleaned in tedlium.
 
 # Options which are not passed through to run_ivector_common.sh
-affix=1h3   #affix for TDNN+LSTM directory e.g. "1a" or "1b", in case we change the configuration.
+affix=1h   #affix for TDNN+LSTM directory e.g. "1a" or "1b", in case we change the configuration.
 common_egs_dir=
 reporting_email=
 
@@ -62,12 +82,15 @@ where "nvcc" is installed.
 EOF
 fi
 
-local/nnet3/run_xvector_common.sh \
+local/nnet3/run_ivector_common.sh \
   --stage $stage --nj $nj \
-  --xvector-extractor-dir $xvector_extractor \
-  --train-set ${train_set} \
-  --test-sets "${test_sets}" \
-  --xvector-dim $xvector_dim 
+  --train-set $train_set --gmm $gmm \
+  --num-threads-ubm $num_threads_ubm \
+  --nj-extractor $nj_extractor \
+  --num-processes-extractor $num_processes_extractor \
+  --num-threads-extractor $num_threads_extractor \
+  --nnet3-affix "$nnet3_affix"
+
 
 
 gmm_dir=exp/${gmm}
@@ -75,7 +98,7 @@ ali_dir=exp/${gmm}_ali_${train_set}_sp
 lat_dir=exp/chain${nnet3_affix}/${gmm}_${train_set}_sp_lats
 dir=exp/chain${nnet3_affix}/tdnn${affix}_sp
 train_data_dir=data/${train_set}_sp_hires
-train_ivector_dir=exp/nnet3${nnet3_affix}/xvectors_${train_set}_sp_hires_${xvector_dim}
+train_ivector_dir=exp/nnet3${nnet3_affix}/ivectors_${train_set}_sp_hires
 lores_train_data_dir=data/${train_set}_sp
 
 # note: you don't necessarily have to change the treedir name
@@ -94,7 +117,7 @@ for f in $train_data_dir/feats.scp $train_ivector_dir/ivector_online.scp \
 done
 
 
-if [ $stage -le 4 ]; then
+if [ $stage -le 12 ]; then
   echo "$0: creating lang directory $lang with chain-type topology"
   # Create a version of the lang/ directory that has one state per phone in the
   # topo file. [note, it really has two states.. the first one is only repeated
@@ -117,7 +140,7 @@ if [ $stage -le 4 ]; then
   fi
 fi
 
-if [ $stage -le 5 ]; then
+if [ $stage -le 13 ]; then
   # Get the alignments as lattices (gives the chain training more freedom).
   # use the same num-jobs as the alignments
   steps/align_fmllr_lats.sh --nj 100 --cmd "$train_cmd" ${lores_train_data_dir} \
@@ -125,7 +148,7 @@ if [ $stage -le 5 ]; then
   rm $lat_dir/fsts.*.gz # save space
 fi
 
-if [ $stage -le 6 ]; then
+if [ $stage -le 14 ]; then
   # Build a tree using our new topology.  We know we have alignments for the
   # speed-perturbed data (local/nnet3/run_ivector_common.sh made them), so use
   # those.  The num-leaves is always somewhat less than the num-leaves from
@@ -142,7 +165,7 @@ if [ $stage -le 6 ]; then
 fi
 
 
-if [ $stage -le 7 ]; then
+if [ $stage -le 15 ]; then
   mkdir -p $dir
   echo "$0: creating neural net configs using the xconfig parser";
 
@@ -156,16 +179,15 @@ if [ $stage -le 7 ]; then
 
   mkdir -p $dir/configs
   cat <<EOF > $dir/configs/network.xconfig
-  input dim=128 name=ivector
+  input dim=100 name=ivector
   input dim=40 name=input
 
-  # please note that it is important to have input layer with the name=input
-  # as the layer immediately preceding the fixed-affine-layer to enable
-  # the use of short notation for the descriptor
-  fixed-affine-layer name=lda input=Append(-1,0,1,ReplaceIndex(ivector, t, 0)) affine-transform-file=$dir/configs/lda.mat
+  idct-layer name=idct input=input dim=40 cepstral-lifter=22 affine-transform-file=$dir/configs/idct.mat
+  delta-layer name=delta input=idct
+  no-op-component name=input2 input=Append(delta, Scale(1.0, ReplaceIndex(ivector, t, 0)))
 
   # the first splicing is moved before the lda layer, so no splicing here
-  relu-batchnorm-dropout-layer name=tdnn1 $tdnn_opts dim=1024
+  relu-batchnorm-layer name=tdnn1 $tdnn_opts dim=1024 input=input2
   tdnnf-layer name=tdnnf2 $tdnnf_opts dim=1024 bottleneck-dim=128 time-stride=1
   tdnnf-layer name=tdnnf3 $tdnnf_opts dim=1024 bottleneck-dim=128 time-stride=1
   tdnnf-layer name=tdnnf4 $tdnnf_opts dim=1024 bottleneck-dim=128 time-stride=1
@@ -191,7 +213,7 @@ EOF
 fi
 
 
-if [ $stage -le 8 ]; then
+if [ $stage -le 16 ]; then
   if [[ $(hostname -f) == *.clsp.jhu.edu ]] && [ ! -d $dir/egs/storage ]; then
     utils/create_split_dir.pl \
      /export/b0{3,4,5,6}/$USER/kaldi-data/egs/wsj-$(date +'%m_%d_%H_%M')/s5/$dir/egs/storage $dir/egs/storage
@@ -232,7 +254,7 @@ if [ $stage -le 8 ]; then
     --dir=$dir  || exit 1;
 fi
 
-if [ $stage -le 9 ]; then
+if [ $stage -le 17 ]; then
   # The reason we are using data/lang here, instead of $lang, is just to
   # emphasize that it's not actually important to give mkgraph.sh the
   # lang directory with the matched topology (since it gets the
@@ -253,7 +275,7 @@ if [ $stage -le 9 ]; then
     $tree_dir $tree_dir/graph_bd_tgpr || exit 1;
 fi
 
-if [ $stage -le 10 ]; then
+if [ $stage -le 18 ]; then
   frames_per_chunk=$(echo $chunk_width | cut -d, -f1)
   rm $dir/.error 2>/dev/null || true
 
@@ -269,7 +291,7 @@ if [ $stage -le 10 ]; then
           --extra-right-context-final 0 \
           --frames-per-chunk $frames_per_chunk \
           --nj $nspk --cmd "$decode_cmd"  --num-threads 4 \
-          --online-ivector-dir exp/nnet3${nnet3_affix}/xvectors_${data}_hires_${xvector_dim} \
+          --online-ivector-dir exp/nnet3${nnet3_affix}/ivectors_${data}_hires \
           $tree_dir/graph_${lmtype} data/${data}_hires ${dir}/decode_${lmtype}_${data_affix} || exit 1
       done
       steps/lmrescore.sh \

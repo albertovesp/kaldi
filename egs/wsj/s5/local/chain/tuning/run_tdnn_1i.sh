@@ -1,10 +1,26 @@
 #!/bin/bash
 
-# 1i is as 1h but applies PCA on x-vectors to reduce dimensionality.
+# 1i is like 1h, while it introduces 'apply-cmvn-online' that does
+# cmn normalization both for i-extractor and TDNN input.
 
-# local/chain/compare_wer.sh exp/chain/tdnn1f_sp exp/chain/tdnn1g_sp
+# local/chain/compare_wer.sh exp/chain/tdnn1h_sp exp/chain_online_cmn/tdnn1i_sp
+# System                tdnn1h_sp tdnn1i_sp
+#WER dev93 (tgpr)                6.89      6.90
+#WER dev93 (tg)                  6.63      6.73
+#WER dev93 (big-dict,tgpr)       4.96      4.91
+#WER dev93 (big-dict,fg)         4.53      4.44
+#WER eval92 (tgpr)               4.68      4.77
+#WER eval92 (tg)                 4.32      4.36
+#WER eval92 (big-dict,tgpr)      2.69      2.85
+#WER eval92 (big-dict,fg)        2.34      2.36
+# Final train prob        -0.0442   -0.0436
+# Final valid prob        -0.0537   -0.0540
+# Final train prob (xent)   -0.6548   -0.6592
+# Final valid prob (xent)   -0.7324   -0.7326
+# Num-params                 8349232   8349232
 
-# steps/info/chain_dir_info.pl exp/chain/tdnn1g_sp
+# steps/info/chain_dir_info.pl exp/chain_online_cmn/tdnn1i_sp
+# exp/chain_online_cmn/tdnn1i_sp: num-iters=108 nj=2..8 num-params=8.3M dim=40+100->2840 combine=-0.045->-0.045 (over 1) xent:train/valid[71,107,final]=(-0.873,-0.653,-0.659/-0.922,-0.713,-0.733) logprob:train/valid[71,107,final]=(-0.064,-0.044,-0.044/-0.068,-0.054,-0.054)
 
 set -e -o pipefail
 
@@ -13,19 +29,31 @@ set -e -o pipefail
 stage=0
 nj=30
 train_set=train_si284
-test_sets='test_dev93 test_eval92'
+test_sets="test_dev93 test_eval92"
 gmm=tri4b        # this is the source gmm-dir that we'll use for alignments; it
                  # should have alignments for the specified training data.
 
-xvector_dim=512
-pca_dim=100
-xvector_extractor=exp/extractors/xvector_vox_${xvector_dim}
-nnet3_affix=       # affix for exp dirs, e.g. it was _cleaned in tedlium.
+num_threads_ubm=8
+
+nj_extractor=10
+# It runs a JOB with '-pe smp N', where N=$[threads*processes]
+num_threads_extractor=4
+num_processes_extractor=2
+
+nnet3_affix=_online_cmn   # affix for exp dirs, e.g. it was _cleaned in tedlium.
 
 # Options which are not passed through to run_ivector_common.sh
 affix=1i   #affix for TDNN+LSTM directory e.g. "1a" or "1b", in case we change the configuration.
 common_egs_dir=
 reporting_email=
+
+# Setting 'online_cmvn' to true replaces 'apply-cmvn' by
+# 'apply-cmvn-online' both for i-vector extraction and TDNN input.
+# The i-vector extractor uses the config 'conf/online_cmvn.conf' for
+# both the UBM and the i-extractor. The TDNN input is configured via
+# '--feat.cmvn-opts' that is set to the same config, so we use the
+# same cmvn for i-extractor and the TDNN input.
+online_cmvn=true
 
 # LSTM/chain options
 train_stage=-10
@@ -40,10 +68,10 @@ chunk_right_context=0
 
 # training options
 srand=0
-remove_egs=false
+remove_egs=true
 
 #decode options
-test_online_decoding=false  # if true, it will run the last decoding stage.
+test_online_decoding=true  # if true, it will run the last decoding stage.
 
 # End configuration section.
 echo "$0 $@"  # Print the command line for logging
@@ -62,53 +90,24 @@ where "nvcc" is installed.
 EOF
 fi
 
-# Skip this if you already have x-vectors extracted.
-local/nnet3/run_xvector_common.sh \
+local/nnet3/run_ivector_common.sh \
   --stage $stage --nj $nj \
-  --xvector-extractor-dir $xvector_extractor \
-  --train-set ${train_set} \
-  --test-sets "${test_sets}" \
-  --xvector-dim $xvector_dim 
+  --train-set $train_set --gmm $gmm \
+  --online-cmvn-iextractor $online_cmvn \
+  --num-threads-ubm $num_threads_ubm \
+  --nj-extractor $nj_extractor \
+  --num-processes-extractor $num_processes_extractor \
+  --num-threads-extractor $num_threads_extractor \
+  --nnet3-affix "$nnet3_affix"
 
-if [ $stage -le 4 ]; then
-	# Applying PCA on train set 
-	dir=exp/nnet3${nnet3_affix}/xvectors_${train_set}_sp_hires_${xvector_dim}
-	dir_reduced=${dir}_${pca_dim}
-	local/nnet3/transform_xvector.sh \
-		--dir $dir \
-		--dir-reduced $dir_reduced \
-		--pca-dim $pca_dim \
-		--data data/${train_set}_sp_xvec \
-		--nj 20
-fi
 
-if [ $stage -le 5 ]; then
-	# Applying PCA on test sets
-	dir=exp/nnet3${nnet3_affix}/xvectors_test_dev93_hires_${xvector_dim}
-	dir_reduced=${dir}_${pca_dim}
-	local/nnet3/transform_xvector.sh \
-		--dir $dir \
-		--dir-reduced $dir_reduced \
-		--pca-dim $pca_dim \
-		--data data/test_dev93_xvec \
-		--nj 10 
-	
-	dir=exp/nnet3${nnet3_affix}/xvectors_test_eval92_hires_${xvector_dim}
-	dir_reduced=${dir}_${pca_dim}
-	local/nnet3/transform_xvector.sh \
-		--dir $dir \
-		--dir-reduced $dir_reduced \
-		--pca-dim $pca_dim \
-		--data data/test_eval92_xvec \
-		--nj 8
-fi
 
 gmm_dir=exp/${gmm}
 ali_dir=exp/${gmm}_ali_${train_set}_sp
 lat_dir=exp/chain${nnet3_affix}/${gmm}_${train_set}_sp_lats
 dir=exp/chain${nnet3_affix}/tdnn${affix}_sp
 train_data_dir=data/${train_set}_sp_hires
-train_ivector_dir=exp/nnet3${nnet3_affix}/xvectors_${train_set}_sp_hires_${xvector_dim}_${pca_dim}
+train_ivector_dir=exp/nnet3${nnet3_affix}/ivectors_${train_set}_sp_hires
 lores_train_data_dir=data/${train_set}_sp
 
 # note: you don't necessarily have to change the treedir name
@@ -127,7 +126,7 @@ for f in $train_data_dir/feats.scp $train_ivector_dir/ivector_online.scp \
 done
 
 
-if [ $stage -le 6 ]; then
+if [ $stage -le 12 ]; then
   echo "$0: creating lang directory $lang with chain-type topology"
   # Create a version of the lang/ directory that has one state per phone in the
   # topo file. [note, it really has two states.. the first one is only repeated
@@ -150,7 +149,7 @@ if [ $stage -le 6 ]; then
   fi
 fi
 
-if [ $stage -le 7 ]; then
+if [ $stage -le 13 ]; then
   # Get the alignments as lattices (gives the chain training more freedom).
   # use the same num-jobs as the alignments
   steps/align_fmllr_lats.sh --nj 100 --cmd "$train_cmd" ${lores_train_data_dir} \
@@ -158,7 +157,7 @@ if [ $stage -le 7 ]; then
   rm $lat_dir/fsts.*.gz # save space
 fi
 
-if [ $stage -le 8 ]; then
+if [ $stage -le 14 ]; then
   # Build a tree using our new topology.  We know we have alignments for the
   # speed-perturbed data (local/nnet3/run_ivector_common.sh made them), so use
   # those.  The num-leaves is always somewhat less than the num-leaves from
@@ -175,7 +174,7 @@ if [ $stage -le 8 ]; then
 fi
 
 
-if [ $stage -le 9 ]; then
+if [ $stage -le 15 ]; then
   mkdir -p $dir
   echo "$0: creating neural net configs using the xconfig parser";
 
@@ -192,13 +191,12 @@ if [ $stage -le 9 ]; then
   input dim=100 name=ivector
   input dim=40 name=input
 
-  # please note that it is important to have input layer with the name=input
-  # as the layer immediately preceding the fixed-affine-layer to enable
-  # the use of short notation for the descriptor
-  fixed-affine-layer name=lda input=Append(-1,0,1) affine-transform-file=$dir/configs/lda.mat
-	no-op-component name=noop1 input=Append(lda, Scale(0.1, ReplaceIndex(ivector,t,0)))
+  idct-layer name=idct input=input dim=40 cepstral-lifter=22 affine-transform-file=$dir/configs/idct.mat
+  delta-layer name=delta input=idct
+  no-op-component name=input2 input=Append(delta, Scale(1.0, ReplaceIndex(ivector, t, 0)))
+
   # the first splicing is moved before the lda layer, so no splicing here
-  relu-batchnorm-dropout-layer name=tdnn1 $tdnn_opts dim=1024
+  relu-batchnorm-layer name=tdnn1 $tdnn_opts dim=1024 input=input2
   tdnnf-layer name=tdnnf2 $tdnnf_opts dim=1024 bottleneck-dim=128 time-stride=1
   tdnnf-layer name=tdnnf3 $tdnnf_opts dim=1024 bottleneck-dim=128 time-stride=1
   tdnnf-layer name=tdnnf4 $tdnnf_opts dim=1024 bottleneck-dim=128 time-stride=1
@@ -224,7 +222,7 @@ EOF
 fi
 
 
-if [ $stage -le 10 ]; then
+if [ $stage -le 16 ]; then
   if [[ $(hostname -f) == *.clsp.jhu.edu ]] && [ ! -d $dir/egs/storage ]; then
     utils/create_split_dir.pl \
      /export/b0{3,4,5,6}/$USER/kaldi-data/egs/wsj-$(date +'%m_%d_%H_%M')/s5/$dir/egs/storage $dir/egs/storage
@@ -233,7 +231,7 @@ if [ $stage -le 10 ]; then
   steps/nnet3/chain/train.py --stage=$train_stage \
     --cmd="$decode_cmd" \
     --feat.online-ivector-dir=$train_ivector_dir \
-    --feat.cmvn-opts="--norm-means=false --norm-vars=false" \
+    --feat.cmvn-opts="--config=conf/online_cmvn.conf" \
     --chain.xent-regularize $xent_regularize \
     --chain.leaky-hmm-coefficient=0.1 \
     --chain.l2-regularize=0.0 \
@@ -255,7 +253,7 @@ if [ $stage -le 10 ]; then
     --egs.chunk-left-context=0 \
     --egs.chunk-right-context=0 \
     --egs.dir="$common_egs_dir" \
-    --egs.opts="--frames-overlap-per-eg 0" \
+    --egs.opts="--frames-overlap-per-eg 0 --online-cmvn $online_cmvn" \
     --cleanup.remove-egs=$remove_egs \
     --use-gpu=true \
     --reporting.email="$reporting_email" \
@@ -265,7 +263,7 @@ if [ $stage -le 10 ]; then
     --dir=$dir  || exit 1;
 fi
 
-if [ $stage -le 11 ]; then
+if [ $stage -le 17 ]; then
   # The reason we are using data/lang here, instead of $lang, is just to
   # emphasize that it's not actually important to give mkgraph.sh the
   # lang directory with the matched topology (since it gets the
@@ -286,7 +284,7 @@ if [ $stage -le 11 ]; then
     $tree_dir $tree_dir/graph_bd_tgpr || exit 1;
 fi
 
-if [ $stage -le 12 ]; then
+if [ $stage -le 18 ]; then
   frames_per_chunk=$(echo $chunk_width | cut -d, -f1)
   rm $dir/.error 2>/dev/null || true
 
@@ -302,7 +300,7 @@ if [ $stage -le 12 ]; then
           --extra-right-context-final 0 \
           --frames-per-chunk $frames_per_chunk \
           --nj $nspk --cmd "$decode_cmd"  --num-threads 4 \
-          --online-ivector-dir exp/nnet3${nnet3_affix}/xvectors_${data}_hires_${xvector_dim}_${pca_dim} \
+          --online-ivector-dir exp/nnet3${nnet3_affix}/ivectors_${data}_hires \
           $tree_dir/graph_${lmtype} data/${data}_hires ${dir}/decode_${lmtype}_${data_affix} || exit 1
       done
       steps/lmrescore.sh \

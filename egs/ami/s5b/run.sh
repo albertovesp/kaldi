@@ -84,16 +84,16 @@ if [ $stage -le 3 ]; then
     # test the WER impact.  I suspect it will be quite small and maybe hard to
     # measure consistently.
     utils/data/modify_speaker_info.sh --seconds-per-spk-max 30 \
-      data/$mic/${dset}_orig data/$mic/$dset
+      data/$mic/${dset}_orig_sil data/$mic/${dset}_sil
   done
 fi
 
 # Feature extraction,
 if [ $stage -le 4 ]; then
   for dset in train dev eval; do
-    steps/make_mfcc.sh --nj 15 --cmd "$train_cmd" data/$mic/$dset
-    steps/compute_cmvn_stats.sh data/$mic/$dset
-    utils/fix_data_dir.sh data/$mic/$dset
+    steps/make_mfcc.sh --nj 15 --cmd "$train_cmd" data/$mic/${dset}_sil
+    steps/compute_cmvn_stats.sh data/$mic/${dset}_sil
+    utils/fix_data_dir.sh data/$mic/${dset}_sil
   done
 fi
 
@@ -128,9 +128,9 @@ if [ $stage -le 7 ]; then
   $decode_cmd --mem 4G $graph_dir/mkgraph.log \
     utils/mkgraph.sh data/lang_${LM} exp/$mic/tri2 $graph_dir
   steps/decode.sh --nj $nj --cmd "$decode_cmd" --config conf/decode.conf \
-    $graph_dir data/$mic/dev exp/$mic/tri2/decode_dev_${LM}
+    $graph_dir data/$mic/dev_sil exp/$mic/tri2/decode_dev_${LM}
   steps/decode.sh --nj $nj --cmd "$decode_cmd" --config conf/decode.conf \
-    $graph_dir data/$mic/eval exp/$mic/tri2/decode_eval_${LM}
+    $graph_dir data/$mic/eval_sil exp/$mic/tri2/decode_eval_${LM}
 fi
 
 
@@ -148,9 +148,9 @@ if [ $stage -le 9 ]; then
   $decode_cmd --mem 4G $graph_dir/mkgraph.log \
     utils/mkgraph.sh data/lang_${LM} exp/$mic/tri3 $graph_dir
   steps/decode_fmllr.sh --nj $nj --cmd "$decode_cmd" --config conf/decode.conf \
-    $graph_dir data/$mic/dev exp/$mic/tri3/decode_dev_${LM}
+    $graph_dir data/$mic/dev_sil exp/$mic/tri3/decode_dev_${LM}
   steps/decode_fmllr.sh --nj $nj --cmd "$decode_cmd" --config conf/decode.conf \
-    $graph_dir data/$mic/eval exp/$mic/tri3/decode_eval_${LM}
+    $graph_dir data/$mic/eval_sil exp/$mic/tri3/decode_eval_${LM}
 fi
 
 if [ $stage -le 10 ]; then

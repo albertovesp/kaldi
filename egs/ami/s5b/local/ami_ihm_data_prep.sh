@@ -12,8 +12,8 @@
 . ./path.sh
 
 #check existing directories
-if [ $# -ne 2 ] || [ "$2" != "ihm" ]; then
-  echo "Usage: $0 /path/to/AMI ihm"
+if [ $# -gt 3 ] || [ "$2" != "ihm" ]; then
+  echo "Usage: $0 /path/to/AMI ihm [--add-silence]"
   echo "e.g. $0 /foo/bar/AMI ihm"
   echo "note: the 2nd 'ihm' argument is for compatibility with other scripts."
   exit 1;
@@ -25,6 +25,14 @@ SEGS=data/local/annotations/train.txt
 dir=data/local/ihm/train
 odir=data/ihm/train_orig
 mkdir -p $dir
+
+if [ $3 == "--add-silence" ]; then
+  # Artificially add silences in annotations
+  local/add_silences.py $SEGS data/local/annotations/train_sil.txt \
+    --silence-ratio 0.1 --random-seed 7
+  SEGS=data/local/annotations/train_sil.txt
+  odir=${odir}_sil
+fi
 
 # Audio data directory check
 if [ ! -d $AMI_DIR ]; then
@@ -57,12 +65,14 @@ awk '{meeting=$1; channel=$2; speaker=$3; stime=$4; etime=$5;
  for(i=6;i<=NF;i++) printf(" %s", $i); printf "\n"}' $SEGS | sort | uniq > $dir/text
 
 # (1b) Make segment files from transcript
-
-awk '{
+awk -v seed=$RANDOM '{
+       srand(seed);
+       left_buff=rand();
+       right_buff=rand();
        segment=$1;
        split(segment,S,"[_]");
        audioname=S[1]"_"S[2]"_"S[3]; startf=S[5]; endf=S[6];
-       print segment " " audioname " " startf*10/1000 " " endf*10/1000 " "
+       print segment " " audioname " " (startf*10/1000 - left_buff) " " (endf*10/1000 + right_buff)  " "
 }' < $dir/text > $dir/segments
 
 # (1c) Make wav.scp file.

@@ -11,7 +11,7 @@
 . ./path.sh
 
 #check existing directories
-if [ $# != 3 ] || [ $2 != "ihm" ]; then
+if [ $# -gt 4 ] || [ $2 != "ihm" ]; then
   echo "Usage: $0 /path/to/AMI ihm (dev|eval)"
   exit 1;
 fi
@@ -36,6 +36,14 @@ if [ ! -f $SEGS ]; then
   exit 1;
 fi
 
+if [ $4 == "--add-silence" ]; then
+  # Artificially add silences in annotations
+  local/add_silences.py $SEGS data/local/annotations/train_sil.txt \
+    --silence-ratio 0.1 --random-seed 7
+  SEGS=data/local/annotations/train_sil.txt
+  odir=${odir}_sil
+fi
+
 # find headset wav audio files only, here we again get all
 # the files in the corpora and filter only specific sessions
 # while building segments
@@ -58,11 +66,14 @@ awk '{meeting=$1; channel=$2; speaker=$3; stime=$4; etime=$5;
 # (1c) Make segment files from transcript
 #segments file format is: utt-id side-id start-time end-time, e.g.:
 
-awk '{
+awk -v seed=$RANDOM '{
+       srand(seed);
+       left_buff=rand();
+       right_buff=rand();
        segment=$1;
        split(segment,S,"[_]");
        audioname=S[1]"_"S[2]"_"S[3]; startf=S[5]; endf=S[6];
-       print segment " " audioname " " startf*10/1000 " " endf*10/1000 " "
+       print segment " " audioname " " (startf*10/1000 - left_buff) " " (endf*10/1000 + right_buff)  " "
 }' < $dir/text > $dir/segments
 
 #prepare wav.scp

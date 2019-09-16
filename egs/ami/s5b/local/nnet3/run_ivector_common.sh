@@ -63,7 +63,7 @@ if [ $stage -le 2 ]; then
     utils/create_split_dir.pl /export/b0{5,6,7,8}/$USER/kaldi-data/mfcc/ami-$mic-$(date +'%m_%d_%H_%M')/s5/$mfccdir/storage $mfccdir/storage
   fi
 
-  for datadir in ${train_set}_sp dev eval; do
+  for datadir in ${train_set}_sp dev_sil eval_sil; do
     utils/copy_data_dir.sh data/$mic/$datadir data/$mic/${datadir}_hires
   done
 
@@ -71,7 +71,7 @@ if [ $stage -le 2 ]; then
   # features; this helps make trained nnets more invariant to test data volume.
   utils/data/perturb_data_dir_volume.sh data/$mic/${train_set}_sp_hires
 
-  for datadir in ${train_set}_sp dev eval; do
+  for datadir in ${train_set}_sp dev_sil eval_sil; do
     steps/make_mfcc.sh --nj $nj --mfcc-config conf/mfcc_hires.conf \
       --cmd "$train_cmd" data/$mic/${datadir}_hires
     steps/compute_cmvn_stats.sh data/$mic/${datadir}_hires
@@ -199,7 +199,7 @@ if [ $stage -le 7 ]; then
 
   # Also extract iVectors for the test data, but in this case we don't need the speed
   # perturbation (sp) or small-segment concatenation (comb).
-  for data in dev eval; do
+  for data in dev_sil eval_sil; do
     steps/online/nnet2/extract_ivectors_online.sh --cmd "$train_cmd" --nj "$nj" \
       data/${mic}/${data}_hires exp/$mic/nnet3${nnet3_affix}/extractor \
       exp/$mic/nnet3${nnet3_affix}/ivectors_${data}_hires

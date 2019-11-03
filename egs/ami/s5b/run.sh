@@ -162,7 +162,7 @@ if [ $stage -le 10 ]; then
   # you can reduce it using the --nj option if you want.
   local/run_cleanup_segmentation.sh --mic $mic
 fi
-
+exit 1
 if [ $stage -le 11 ]; then
   ali_opt=
   [ "$mic" != "ihm" ] && ali_opt="--use-ihm-ali true"

@@ -251,7 +251,7 @@ if [ $stage -le 16 ]; then
     --lat-dir $lat_dir \
     --dir $dir
 fi
-
+exit 1
 
 graph_dir=$dir/graph_${LM}
 if [ $stage -le 17 ]; then

@@ -1,19 +1,15 @@
 #!/bin/bash
 
-# 1a is same as 1h setup in WSJ
+# 1b is same as 1a but adds speech and noise vectors for
+# noise adaptive training. These vectors are estimated by
+# averaging the speech and non-speech frames obtained
+# from a first pass segmentation. The input to the acoustic
+# model is: [MFCC ivector noise speech] where MFCC, speech, and
+# noise are 40-dim and ivector is 100-dim.
 
-# local/chain/compare_wer.sh exp/chain/tdnn1a_sp
-# System                  tdnn1a_sp
-# WER eval92 (tgpr_5k)       7.67
-# WER 0166 (tgpr_5k)         7.88
-# Final train prob        -0.0338
-# Final valid prob        -0.0602
-# Final train prob (xent)   -0.7632
-# Final valid prob (xent)   -0.9377
-# Num-params                 8315264
+# local/chain/compare_wer.sh exp/chain/tdnn1a_sp exp/chain/tdnn1b_sp
 
-# steps/info/chain_dir_info.pl exp/chain/tdnn1a_sp
-# exp/chain/tdnn1a_sp: num-iters=24 nj=2..8 num-params=8.3M dim=40+100->2752 combine=-0.034->-0.034 (over 1) xent:train/valid[15,23,final]=(-1.13,-0.809,-0.763/-1.16,-0.961,-0.938) logprob:train/valid[15,23,final]=(-0.063,-0.038,-0.034/-0.068,-0.062,-0.060)
+# steps/info/chain_dir_info.pl exp/chain/tdnn1b_sp
 
 set -e -o pipefail
 
@@ -22,7 +18,7 @@ set -e -o pipefail
 stage=0
 nj=30
 train_set=train_si84_multi
-test_sets="eval92 0166"
+test_sets="test_eval92 test_0166"
 gmm=tri3b_multi        # this is the source gmm-dir that we'll use for alignments; it
                  # should have alignments for the specified training data.
 
@@ -34,10 +30,11 @@ num_threads_extractor=4
 num_processes_extractor=2
 
 nnet3_affix=       # affix for exp dirs, e.g. it was _cleaned in tedlium.
+segmentation_affix=
 
 # Options which are not passed through to run_ivector_common.sh
-affix=1a   #affix for TDNN+LSTM directory e.g. "1a" or "1b", in case we change the configuration.
-common_egs_dir=
+affix=1b   #affix for TDNN directory e.g. "1a" or "1b", in case we change the configuration.
+common_egs_dir=exp/chain/tdnn1b_sp/egs
 reporting_email=
 
 # LSTM/chain options
@@ -75,6 +72,7 @@ where "nvcc" is installed.
 EOF
 fi
 
+# The following script handles stages 1 to 8
 local/nnet3/run_ivector_common.sh \
   --stage $stage --nj $nj \
   --train-set $train_set --gmm $gmm \
@@ -85,6 +83,13 @@ local/nnet3/run_ivector_common.sh \
   --num-threads-extractor $num_threads_extractor \
   --nnet3-affix "$nnet3_affix"
 
+# The following script handles stages 9 to 16
+local/nnet3/extract_noise_vectors.sh \
+  --stage $stage --nj $nj \
+  --train-set $train_set --gmm $gmm \
+  --test-sets $test_sets \
+  --affix "$segmentation_affix"
+
 gmm_dir=exp/${gmm}
 ali_dir=exp/${gmm}_ali_${train_set}_sp
 lat_dir=exp/chain${nnet3_affix}/${gmm}_${train_set}_sp_lats
@@ -92,6 +97,35 @@ dir=exp/chain${nnet3_affix}/tdnn${affix}_sp
 train_data_dir=data/${train_set}_sp_hires
 train_ivector_dir=exp/nnet3${nnet3_affix}/ivectors_${train_set}_sp_hires
 lores_train_data_dir=data/${train_set}_sp
+
+# Concat ivectors with noise vectors for training set
+if [ $stage -le 17 ]; then
+  segment_dir=exp/chain/segmentation${segmentation_affix}
+  cut -d' ' -f1 ${segment_dir}/${train_set}_targets_sub3/targets.scp | \
+    utils/filter_scp.pl - ${train_ivector_dir}/ivector_online.scp > ${train_ivector_dir}/ivector_online_new.scp
+  mv ${train_ivector_dir}/ivector_online.scp ${train_ivector_dir}/ivector_online_old.scp
+  mv ${train_ivector_dir}/ivector_online_new.scp ${train_ivector_dir}/ivector_online.scp
+
+  mkdir -p ${train_ivector_dir}_noise
+  paste-feats scp:${train_ivector_dir}/ivector_online.scp scp:${segment_dir}/${train_set}_targets_sub3/noise_vec_online.scp \
+    ark,scp:${train_ivector_dir}_noise/ivector_online.ark,${train_ivector_dir}_noise/ivector_online.scp
+fi
+
+# Concat ivectors with noise vectors for test set
+if [ $stage -le 18 ]; then
+  for test_dir in ${test_sets}; do
+    segment_dir=exp/chain/segmentation${segmentation_affix}
+    ivector_dir=exp/nnet3${nnet3_affix}/ivectors_${test_dir}_hires
+    cut -d' ' -f1 ${segment_dir}/${test_dir}_targets_sub3/targets.scp | \
+      utils/filter_scp.pl - ${ivector_dir}/ivector_online.scp > ${ivector_dir}/ivector_online_new.scp
+    mv ${ivector_dir}/ivector_online.scp ${ivector_dir}/ivector_online_old.scp
+    mv ${ivector_dir}/ivector_online_new.scp ${ivector_dir}/ivector_online.scp
+
+    mkdir -p ${ivector_dir}_noise
+    paste-feats scp:${ivector_dir}/ivector_online.scp scp:${segment_dir}/${test_dir}_targets_sub3/noise_vec_online.scp \
+      ark,scp:${ivector_dir}_noise/ivector_online.ark,${ivector_dir}_noise/ivector_online.scp
+  done
+fi
 
 # note: you don't necessarily have to change the treedir name
 # each time you do a new experiment-- only if you change the
@@ -109,7 +143,7 @@ for f in $train_data_dir/feats.scp $train_ivector_dir/ivector_online.scp \
 done
 
 
-if [ $stage -le 9 ]; then
+if [ $stage -le 19 ]; then
   echo "$0: creating lang directory $lang with chain-type topology"
   # Create a version of the lang/ directory that has one state per phone in the
   # topo file. [note, it really has two states.. the first one is only repeated
@@ -132,7 +166,7 @@ if [ $stage -le 9 ]; then
   fi
 fi
 
-if [ $stage -le 10 ]; then
+if [ $stage -le 20 ]; then
   # Get the alignments as lattices (gives the chain training more freedom).
   # use the same num-jobs as the alignments
   steps/align_fmllr_lats.sh --nj 100 --cmd "$train_cmd" ${lores_train_data_dir} \
@@ -140,7 +174,7 @@ if [ $stage -le 10 ]; then
   rm $lat_dir/fsts.*.gz # save space
 fi
 
-if [ $stage -le 11 ]; then
+if [ $stage -le 21 ]; then
   # Build a tree using our new topology.  We know we have alignments for the
   # speed-perturbed data (local/nnet3/run_ivector_common.sh made them), so use
   # those.  The num-leaves is always somewhat less than the num-leaves from
@@ -156,7 +190,7 @@ if [ $stage -le 11 ]; then
     $lang $ali_dir $tree_dir
 fi
 
-if [ $stage -le 12 ]; then
+if [ $stage -le 22 ]; then
   mkdir -p $dir
   echo "$0: creating neural net configs using the xconfig parser";
 
@@ -170,7 +204,7 @@ if [ $stage -le 12 ]; then
 
   mkdir -p $dir/configs
   cat <<EOF > $dir/configs/network.xconfig
-  input dim=100 name=ivector
+  input dim=180 name=ivector
   input dim=40 name=input
 
   idct-layer name=idct input=input dim=40 cepstral-lifter=22 affine-transform-file=$dir/configs/idct.mat
@@ -203,8 +237,7 @@ EOF
   steps/nnet3/xconfig_to_configs.py --xconfig-file $dir/configs/network.xconfig --config-dir $dir/configs/
 fi
 
-
-if [ $stage -le 13 ]; then
+if [ $stage -le 23 ]; then
   if [[ $(hostname -f) == *.clsp.jhu.edu ]] && [ ! -d $dir/egs/storage ]; then
     utils/create_split_dir.pl \
      /export/b0{3,4,5,6}/$USER/kaldi-data/egs/aurora4-$(date +'%m_%d_%H_%M')/s5/$dir/egs/storage $dir/egs/storage
@@ -212,7 +245,7 @@ if [ $stage -le 13 ]; then
 
   steps/nnet3/chain/train.py --stage=$train_stage \
     --cmd="$train_cmd" \
-    --feat.online-ivector-dir=$train_ivector_dir \
+    --feat.online-ivector-dir=${train_ivector_dir}_noise \
     --feat.cmvn-opts="--norm-means=false --norm-vars=false" \
     --chain.xent-regularize $xent_regularize \
     --chain.leaky-hmm-coefficient=0.1 \
@@ -245,7 +278,7 @@ if [ $stage -le 13 ]; then
     --dir=$dir  || exit 1;
 fi
 
-if [ $stage -le 14 ]; then
+if [ $stage -le 24 ]; then
   # The reason we are using data/lang here, instead of $lang, is just to
   # emphasize that it's not actually important to give mkgraph.sh the
   # lang directory with the matched topology (since it gets the
@@ -261,13 +294,13 @@ if [ $stage -le 14 ]; then
 
 fi
 
-if [ $stage -le 15 ]; then
+if [ $stage -le 25 ]; then
   frames_per_chunk=$(echo $chunk_width | cut -d, -f1)
   rm $dir/.error 2>/dev/null || true
 
-  for data in ${test_sets}; do
+  for data in $test_sets; do
     data_affix=$(echo $data | sed s/test_//)
-    nspk=$(wc -l <data/test_${data}_hires/spk2utt)
+    nspk=$(wc -l <data/${data}_hires/spk2utt)
     for lmtype in tgpr_5k; do
       steps/nnet3/decode.sh \
         --acwt 1.0 --post-decode-acwt 10.0 \
@@ -276,8 +309,8 @@ if [ $stage -le 15 ]; then
         --extra-right-context-final 0 \
         --frames-per-chunk $frames_per_chunk \
         --nj $nspk --cmd "$decode_cmd"  --num-threads 4 \
-        --online-ivector-dir exp/nnet3${nnet3_affix}/ivectors_test_${data}_hires \
-        $tree_dir/graph_${lmtype} data/test_${data}_hires ${dir}/decode_${lmtype}_${data_affix} || exit 1
+        --online-ivector-dir exp/nnet3${nnet3_affix}/ivectors_${data}_hires_noise \
+        $tree_dir/graph_${lmtype} data/${data}_hires ${dir}/decode_${lmtype}_${data_affix} || exit 1
     done
   done
   [ -f $dir/.error ] && echo "$0: there was a problem while decoding" && exit 1

@@ -84,7 +84,7 @@ done
 mkdir -p $dir
 
 if [ -z "$garbage_phones" ]; then
-  oov_phone=$(steps/segmentation/internal/get_oov_phone.py $lang) || exit 1
+  oov_phone=$(steps/segmentation/internal/find_oov_phone.py $lang) || exit 1
   echo $oov_phone | utils/int2sym.pl $lang/phones.txt > $dir/garbage_phones.txt || exit 1
 else 
   cp $garbage_phones $dir/garbage_phones.txt || exit 1

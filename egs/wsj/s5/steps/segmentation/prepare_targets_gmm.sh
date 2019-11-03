@@ -154,7 +154,7 @@ fi
 # Work with a temporary data directory with CMVN stats computed using 
 # only the segments from the original data directory.
 whole_data_dir=$dir/$whole_data_id
-
+echo 2
 ###############################################################################
 # Obtain supervision-constrained lattices
 ###############################################################################
@@ -169,7 +169,7 @@ fi
 ###############################################################################
 uniform_seg_data_dir=$dir/${whole_data_id}_uniformseg_${max_segment_duration}sec
 uniform_seg_data_id=`basename $uniform_seg_data_dir`
-
+echo 3
 if [ $stage -le 3 ]; then
   utils/data/get_segments_for_data.sh ${whole_data_dir} > \
     ${whole_data_dir}/segments

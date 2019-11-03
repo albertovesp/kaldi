@@ -10,7 +10,7 @@ set -e -o pipefail
 stage=0
 nj=30
 train_set=train_si84   # you might set this to e.g. train.
-test_sets="test_0166 test_eval92"
+test_sets=
 gmm=tri4b                # This specifies a GMM-dir from the features of the type you're training the system on;
                          # it should contain alignments for 'train_set'.
 online_cmvn_iextractor=false

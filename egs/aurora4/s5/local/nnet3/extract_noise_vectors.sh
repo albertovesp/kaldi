@@ -54,25 +54,12 @@ if [ $stage -le 9 ]; then
 fi
 
 if [ $stage -le 10 ]; then
-  # Filter data based on succesfully segmented utterances
-  cut -d' ' -f1 ${targets_dir}/targets.scp | \
-    utils/filter_scp.pl - data/${train_set}_sp/feats.scp > data/${train_set}_sp/feats_new.scp
-  mv data/${train_set}_sp/feats.scp data/${train_set}_sp/feats_old.scp
-  mv data/${train_set}_sp/feats_new.scp data/${train_set}_sp/feats.scp
-
-  cut -d' ' -f1 ${targets_dir}/targets.scp | \
-    utils/filter_scp.pl - data/${train_set}_sp_hires/feats.scp > data/${train_set}_sp_hires/feats_new.scp
-  mv data/${train_set}_sp_hires/feats.scp data/${train_set}_sp_hires/feats_old.scp
-  mv data/${train_set}_sp_hires/feats_new.scp data/${train_set}_sp_hires/feats.scp
-fi
-
-if [ $stage -le 11 ]; then
   # Compute speech and noise vectors for training data
   compute-noise-vector --concat-speech-vector=${concat_speech_vector} scp:data/${train_set}_sp_hires/feats.scp \
     scp:$targets_dir/targets.scp ark,scp:$targets_dir/noise_vec.ark,$targets_dir/noise_vec.scp
 fi
 
-if [ $stage -le 12 ]; then
+if [ $stage -le 11 ]; then
   base_feat_dim=$(feat-to-dim scp:data/${train_set}_sp_hires/feats.scp -) || exit 1;
   start_dim=$base_feat_dim
   if [ $concat_speech_vector ]; then
@@ -90,52 +77,35 @@ if [ $stage -le 12 ]; then
     ark,scp:$targets_dir/noise_vec_online.ark,$targets_dir/noise_vec_online.scp || exit 1;
 fi
 
-if [ $stage -le 13 ]; then
+if [ $stage -le 12 ]; then
   # Segmentation for test data
   for test_dir in ${test_sets}; do
     lang_dir=data/lang_test_tgpr
-    lat_dir=${segment_dir}/${test_dir}_lats
     targets_dir=${segment_dir}/${test_dir}_targets_sub3
     nspk=$(wc -l <data/${test_dir}/spk2utt)
 
-    steps/align_fmllr_lats.sh --nj $nspk \
-      --cmd "$train_cmd" \
-      data/${test_dir} $lang_dir exp/$gmm $lat_dir
+    utils/mkgraph.sh data/lang_test_tgpr \
+      exp/$gmm exp/$gmm/graph_tgpr || exit 1;
+    steps/decode_fmllr.sh --nj $nspk --cmd "$decode_cmd" --skip-scoring true \
+      exp/$gmm/graph_tgpr data/${test_dir} exp/$gmm/decode_tgpr_${test_dir} || exit 1;
 
     steps/segmentation/lats_to_targets.sh \
       --silence-phones ${segment_dir}/silence_phones.txt \
       --garbage-phones ${segment_dir}/garbage_phones.txt \
-      data/${test_dir} $lang_dir $lat_dir $targets_dir
+      data/${test_dir} $lang_dir exp/$gmm/decode_tgpr_${test_dir} $targets_dir
   done
 fi
-
-if [ $stage -le 14 ]; then
-  # Filter data based on succesfully segmented utterances
-  for test_dir in ${test_sets}; do
-    targets_dir=${segment_dir}/${test_dir}_targets_sub3
-    
-    cut -d' ' -f1 ${targets_dir}/targets.scp | \
-      utils/filter_scp.pl - data/${test_dir}/feats.scp > data/${test_dir}/feats_new.scp
-    mv data/${test_dir}/feats.scp data/${test_dir}/feats_old.scp
-    mv data/${test_dir}/feats_new.scp data/${test_dir}/feats.scp
-
-    cut -d' ' -f1 ${targets_dir}/targets.scp | \
-      utils/filter_scp.pl - data/${test_dir}_hires/feats.scp > data/${test_dir}_hires/feats_new.scp
-    mv data/${test_dir}_hires/feats.scp data/${test_dir}_hires/feats_old.scp
-    mv data/${test_dir}_hires/feats_new.scp data/${test_dir}_hires/feats.scp
-  done
-fi
-
-if [ $stage -le 15 ]; then
+ 
+if [ $stage -le 13 ]; then
   # Compute speech and noise vectors for test data
-  for test_dir in ${test_sets}; do
+  for test_dir in $test_sets; do
     targets_dir=${segment_dir}/${test_dir}_targets_sub3
     compute-noise-vector --concat-speech-vector=$concat_speech_vector scp:data/${test_dir}_hires/feats.scp \
       scp:$targets_dir/targets.scp ark,scp:$targets_dir/noise_vec.ark,$targets_dir/noise_vec.scp
   done
 fi
 
-if [ $stage -le 16 ]; then
+if [ $stage -le 14 ]; then
   for test_dir in ${test_sets}; do
     base_feat_dim=$(feat-to-dim scp:data/${test_dir}_hires/feats.scp -) || exit 1;
     start_dim=$base_feat_dim

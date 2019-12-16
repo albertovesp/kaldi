@@ -36,9 +36,11 @@ int main(int argc, char *argv[]) {
         "Users can optionally specify whether to compute an average\n"
         "speech vector as well, from the speech segments of the\n"
         "utterance. In this case, the noise vector and speech\n"
-        "vector are concatenated for output.\n"
+        "vector are concatenated for output. If no target specifier\n"
+        "is provided, then it returns average over all frames in\n"
+        "the utterance."
         "Usage: compute-noise-vector [options] <feats-rspecifier> "
-        " <targets-rspecifier> <vector-wspecifier>\n"
+        " [<targets-rspecifier>] <vector-wspecifier>\n"
         "E.g.: compute-noise-vector [options] scp:feats.scp scp:targets.scp ark:-\n";
 
     ParseOptions po(usage);
@@ -50,18 +52,24 @@ int main(int argc, char *argv[]) {
 
     po.Read(argc, argv);
 
-    if (po.NumArgs() != 3) {
+    if (po.NumArgs() < 2 || po.NumArgs() >3) {
       po.PrintUsage();
       exit(1);
     }
 
-    std::string feat_rspecifier = po.GetArg(1),
-        target_rspecifier = po.GetArg(2),
-        vector_wspecifier = po.GetArg(3);
+    std::string feat_rspecifier, target_rspecifier, vector_wspecifier;
+    if (po.NumArgs() == 3) {
+      feat_rspecifier = po.GetArg(1),
+          target_rspecifier = po.GetArg(2),
+          vector_wspecifier = po.GetArg(3);
+    } else {
+      feat_rspecifier = po.GetArg(1),
+          vector_wspecifier = po.GetArg(2);
+    }
 
     SequentialBaseFloatMatrixReader feat_reader(feat_rspecifier);
-    RandomAccessBaseFloatMatrixReader target_reader(target_rspecifier);
     BaseFloatVectorWriter vector_writer(vector_wspecifier);
+    RandomAccessBaseFloatMatrixReader target_reader(target_rspecifier);
 
     int32 num_done = 0, num_err = 0;
 
@@ -73,38 +81,50 @@ int main(int argc, char *argv[]) {
         num_err++;
         continue;
       }
-      if (!target_reader.HasKey(utt)) {
-        KALDI_WARN << "No target found for utterance " << utt;
-        num_err++;
-        continue;
-      }
-      const Matrix<BaseFloat> &target = target_reader.Value(utt);
-
-      if (feat.NumRows() != target.NumRows()) {
-        KALDI_WARN << "Mismatch in number for frames " << feat.NumRows()
-                   << " for features and targets " << target.NumRows()
-                   << ", for utterance " << utt;
-        num_err++;
-        continue;
-      }
-      Vector<BaseFloat> speech_feat(feat.NumCols());
       Vector<BaseFloat> noise_feat(feat.NumCols());
-      int32 num_speech = 0, num_noise = 0;
-      for (int32 i = 0; i < feat.NumRows(); i++) {
-        if (target(i,1) > target(i,0) && target(i,1) > target(i,2)) {
-          speech_feat.AddVec(1.0, feat.Row(i));
-          num_speech += 1;
-        } else {
+
+      if (target_rspecifier.empty()) {
+        int32 num_frames = 0;
+        for (int32 i = 0; i < feat.NumRows(); i++) {
           noise_feat.AddVec(1.0, feat.Row(i));
-          num_noise += 1;
+          num_frames += 1;
         }
-      }
-      if (num_speech > 0) { speech_feat.Scale(1.0/num_speech); }
-      if (num_noise > 0) { noise_feat.Scale(1.0/num_noise); }
-      if (concat_speech_vector) {
-        noise_feat.Resize(2*feat.NumCols());
-        SubVector<BaseFloat> speech_subfeat(noise_feat, feat.NumCols(), feat.NumCols());
-        speech_subfeat.CopyFromVec(speech_feat);
+        if (num_frames > 0) { noise_feat.Scale(1.0/num_frames); }
+      } else {
+        Vector<BaseFloat> speech_feat(feat.NumCols());
+        int32 num_speech = 0, num_noise = 0;
+        
+        if (!target_reader.HasKey(utt)) {
+          KALDI_WARN << "No target found for utterance. Creating vector of 0s. " << utt;
+          num_err++;
+        } else {
+          const Matrix<BaseFloat> &target = target_reader.Value(utt);
+
+          if (feat.NumRows() != target.NumRows()) {
+            KALDI_WARN << "Mismatch in number for frames " << feat.NumRows()
+                       << " for features and targets " << target.NumRows()
+                       << ", for utterance " << utt
+                       << ". Creating vector of 0s.";
+            num_err++;
+          } else {
+            for (int32 i = 0; i < feat.NumRows(); i++) {
+              if (target(i,1) > target(i,0) && target(i,1) > target(i,2)) {
+                speech_feat.AddVec(1.0, feat.Row(i));
+                num_speech += 1;
+              } else {
+                noise_feat.AddVec(1.0, feat.Row(i));
+                num_noise += 1;
+              }
+            }
+          }
+        }
+        if (num_speech > 0) { speech_feat.Scale(1.0/num_speech); }
+        if (num_noise > 0) { noise_feat.Scale(1.0/num_noise); }
+        if (concat_speech_vector) {
+          noise_feat.Resize(2*feat.NumCols());
+          SubVector<BaseFloat> speech_subfeat(noise_feat, feat.NumCols(), feat.NumCols());
+          speech_subfeat.CopyFromVec(speech_feat);
+        }
       }
       vector_writer.Write(utt, noise_feat);
       num_done++;

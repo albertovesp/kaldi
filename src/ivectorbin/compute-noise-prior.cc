@@ -41,10 +41,10 @@ void ComputeCovarianceMatrix(
     std::map<std::string, Vector<BaseFloat> *> utt2vector,
     SpMatrix<double> *covariance) {
   std::map<std::string, Vector<BaseFloat> >::const_iterator iter;
-  intt32 num_vecs = utt2vector.size();
+  intt32 N = utt2vector.size() - 1;
   for (iter = utt2vector.begin(); iter != utt2vector.end(); ++iter) {
     Vector<BaseFloat> noise_vec = iter->second;
-    covariance.AddVec2(1.0/num_vecs, noise_vec);
+    covariance.AddVec2(1.0/N, noise_vec);
   }
 }
 

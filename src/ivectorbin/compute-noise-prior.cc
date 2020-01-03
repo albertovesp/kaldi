@@ -22,12 +22,14 @@
 #include "util/common-utils.h"
 #include "ivector/online-noise-vector.h"
 
+namespace kaldi {
+
 void ComputeAndSubtractMean(
     std::map<std::string, Vector<BaseFloat> *> utt2vector,
     Vector<BaseFloat> *mean_out) {
   int32 dim = utt2vector.begin()->second->Dim();
   size_t num_vectors = utt2vector.size();
-  Vector<double> mean(dim);
+  Vector<BaseFloat> mean(dim);
   std::map<std::string, Vector<BaseFloat> *>::iterator iter;
   for (iter = utt2vector.begin(); iter != utt2vector.end(); ++iter)
     mean.AddVec(1.0 / num_vectors, *(iter->second));
@@ -38,14 +40,16 @@ void ComputeAndSubtractMean(
 }
 
 void ComputeCovarianceMatrix(
-    std::map<std::string, Vector<BaseFloat> *> utt2vector,
-    SpMatrix<double> *covariance) {
-  std::map<std::string, Vector<BaseFloat> >::const_iterator iter;
-  intt32 N = utt2vector.size() - 1;
+    std::map<std::string, Vector<BaseFloat> *> &utt2vector,
+    SpMatrix<BaseFloat> *covariance) {
+  KALDI_ASSERT(!utt2vector.empty());
+  std::map<std::string, Vector<BaseFloat> *>::iterator iter;
+  int32 N = utt2vector.size() - 1;
   for (iter = utt2vector.begin(); iter != utt2vector.end(); ++iter) {
-    Vector<BaseFloat> noise_vec = iter->second;
-    covariance.AddVec2(1.0/N, noise_vec);
+    Vector<BaseFloat> noise_vec = *(iter->second);
+    covariance->AddVec2(1.0/N, noise_vec);
   }
+}
 }
 
 int main(int argc, char *argv[]) {
@@ -84,7 +88,7 @@ int main(int argc, char *argv[]) {
 
     for (; !noise_vec_reader.Done(); noise_vec_reader.Next()) {
       std::string utt = noise_vec_reader.Key();
-      const Vector<BaseFloat> &noise_vector = noise_vec_reader.Value();
+      const Vector<BaseFloat> noise_vector = noise_vec_reader.Value();
       if (utt2noise_vec.count(utt) != 0) {
         KALDI_WARN << "Duplicate noise vector found for utterance " << utt
                    << ", ignoring it.";
@@ -96,7 +100,7 @@ int main(int argc, char *argv[]) {
         dim = noise_vector.Dim();
       } else {
         KALDI_ASSERT(dim == noise_vector.Dim() && "Noise vector dimension mismatch");
-      }
+      }      
       num_done++;
     }
 
@@ -104,14 +108,17 @@ int main(int argc, char *argv[]) {
     ComputeAndSubtractMean(utt2noise_vec, &mean);
     KALDI_LOG << "2-norm of noise vector mean is " << mean.Norm(2.0);
 
-    SpMatrix<double> covariance;
+    SpMatrix<BaseFloat> covariance;
     ComputeCovarianceMatrix(utt2noise_vec, &covariance);
     
     NoisePrior noise_prior;
-    noise_prior.EstimatePriorParameters(mean, covariance);
+    noise_prior.EstimatePriorParameters(mean, covariance, dim);
 
     WriteKaldiObject(noise_prior, noise_prior_wxfilename, binary);
-
+    KALDI_LOG << "Wrote NoisePrior parameters to "
+              << PrintableWxfilename(noise_prior_wxfilename);
+    
+    return 0;
   } catch(const std::exception &e) {
     std::cerr << e.what();
     return -1;

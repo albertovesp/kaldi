@@ -62,18 +62,19 @@ class NoisePrior {
 
   /// Takes the mean and covariance matrix computed from the
   /// training data and estimates the prior parameters.
-  void EstimatePriorParameters(const VectorBase<double> &mean,
-                               const MatrixBase<double> &covariance) const;
+  void EstimatePriorParameters(const VectorBase<BaseFloat> &mean,
+                               const SpMatrix<BaseFloat> &covariance,
+                               const int32 dim);
 
   void Write(std::ostream &os, bool binary) const;
   void Read(std::istream &is, bool binary);
 
  protected:
-  Vector<double> mu_n_;  // mean of noise vectors.
-  double a_;  // shift factor for mean of speech vectors.
-  double B_;  // scale factor for mean of speech vectors.
-  Matrix<double> Lambda_n_; // precision matrix for noise.
-  Matrix<double> Lambda_s_; // precision matrix for speech.
+  Vector<BaseFloat> mu_n_;  // mean of noise vectors.
+  Vector<BaseFloat> a_;  // shift factor for mean of speech vectors.
+  Matrix<BaseFloat> B_;  // scale factor for mean of speech vectors.
+  Matrix<BaseFloat> Lambda_n_; // precision matrix for noise.
+  Matrix<BaseFloat> Lambda_s_; // precision matrix for speech.
 
  private:
   NoisePrior &operator = (const NoisePrior &other);  // disallow assignment

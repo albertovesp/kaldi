@@ -22,21 +22,6 @@
 
 namespace kaldi {
 
-void ComputeAndSubtractMean(
-    std::map<std::string, Vector<BaseFloat> *> utt2ivector,
-    Vector<BaseFloat> *mean_out) {
-  int32 dim = utt2ivector.begin()->second->Dim();
-  size_t num_ivectors = utt2ivector.size();
-  Vector<double> mean(dim);
-  std::map<std::string, Vector<BaseFloat> *>::iterator iter;
-  for (iter = utt2ivector.begin(); iter != utt2ivector.end(); ++iter)
-    mean.AddVec(1.0 / num_ivectors, *(iter->second));
-  mean_out->Resize(dim);
-  mean_out->CopyFromVec(mean);
-  for (iter = utt2ivector.begin(); iter != utt2ivector.end(); ++iter)
-    iter->second->AddVec(-1.0, *mean_out);
-}
-
 void NoisePrior::Write(std::ostream &os, bool binary) const {
   WriteToken(os, binary, "<NoisePrior>");
   mu_n_.Write(os, binary);
@@ -57,40 +42,29 @@ void NoisePrior::Read(std::istream &is, bool binary) {
   ExpectToken(is, binary, "</NoisePrior>");
 }
 
-void NoisePrior::ComputeMeanAndCovariance(
-    const MatrixBase<double> &noise_vectors,
-    VectorBase<double> *mean,
-    MatrixBase<double> *covariance) const {
-  for (int32 i = 0; i < noise_vectors.NumRows(); i++) {
-    mean.AddVec(1.0, noise_vectors(i));
-  }
-  mean.scale(1.0/noise_vectors.NumRows());
-}
-
-// "float" version of ComputeMeanAndCovariance
-void NoisePrior::ComputeMeanAndCovariance(
-    const MatrixBase<float> &noise_vectors,
-    VectorBase<float> *mean,
-    MatrixBase<float> *covariance) const {
-  Matrix<double> tmp(noise_vectors), tmp_cov;
-  Vector<double> tmp_mean;
-  ComputeMeanAndCovariance(tmp, &tmp_mean, &tmp_cov);
-  mean->CopyFromVec(tmp_mean);
-  covariance->CopyFromMat(tmp_cov);
-}
-
-void EstimatePriorParameters(
-    VectorBase<double> &mean,
-    MatrixBase<double> &covariance) const {
-}
-
-// "float" version of EstimatePriorParameters
-void EstimatePriorParameters(
-    VectorBase<float> &mean,
-    MatrixBase<float> &covariance) const {
-  Vector<double> tmp_mean(mean);
-  Matrix<double> tmp_cov(covariance);
-  EstimatePriorParameters(tmp_mean, tmp_cov);
+void NoisePrior::EstimatePriorParameters(
+    const VectorBase<BaseFloat> &mean,
+    const SpMatrix<BaseFloat> &covariance,
+    const int32 dim) {
+  Matrix<BaseFloat> covariance_(covariance);
+  SubVector<BaseFloat> mu_n(mean, 0, dim/2);
+  SubVector<BaseFloat> mu_s(mean, dim/2, dim);
+  SubMatrix<BaseFloat> cov_nn(covariance_, 0, dim/2, 0, dim/2); 
+  SubMatrix<BaseFloat> cov_sn(covariance_, dim/2, dim, 0, dim/2); 
+  SubMatrix<BaseFloat> cov_ss(covariance_, dim/2, dim, dim/2, dim);
+  Matrix<BaseFloat> Lambda_nn(cov_nn), Lambda_sn(cov_sn), 
+    Lambda_ss(cov_ss), cov_ss_(cov_ss);
+  Lambda_nn.Invert(); 
+  Lambda_sn.Invert(); 
+  Lambda_ss.Invert(); 
+  mu_n_ = mu_n;
+  Lambda_n_ = Lambda_nn;
+  Lambda_s_ = Lambda_ss;
+  // B = - (Lambda_ss)^-1 Lambda_sn
+  B_.AddMatMat(-1.0, cov_ss_, kNoTrans, Lambda_sn, kNoTrans, 0);
+  // a = mu_s - B mu_n
+  a_.CopyFromVec(mu_s);
+  a_.AddMatVec(-1.0, B_, kNoTrans, mu_n_, 1);
 }
 
 

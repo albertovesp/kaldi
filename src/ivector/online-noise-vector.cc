@@ -46,25 +46,25 @@ void NoisePrior::EstimatePriorParameters(
     const VectorBase<BaseFloat> &mean,
     const SpMatrix<BaseFloat> &covariance,
     const int32 dim) {
-  Matrix<BaseFloat> covariance_(covariance);
   SubVector<BaseFloat> mu_n(mean, 0, dim/2);
-  SubVector<BaseFloat> mu_s(mean, dim/2, dim);
-  SubMatrix<BaseFloat> cov_nn(covariance_, 0, dim/2, 0, dim/2); 
-  SubMatrix<BaseFloat> cov_sn(covariance_, dim/2, dim, 0, dim/2); 
-  SubMatrix<BaseFloat> cov_ss(covariance_, dim/2, dim, dim/2, dim);
-  Matrix<BaseFloat> Lambda_nn(cov_nn), Lambda_sn(cov_sn), 
-    Lambda_ss(cov_ss), cov_ss_(cov_ss);
-  Lambda_nn.Invert(); 
-  Lambda_sn.Invert(); 
-  Lambda_ss.Invert(); 
+  SubVector<BaseFloat> mu_s(mean, dim/2, dim/2);
+  Matrix<BaseFloat> Lambda(covariance);
+  Lambda.Invert();
+  SubMatrix<BaseFloat> Lambda_nn(Lambda, 0, dim/2, 0, dim/2); 
+  SubMatrix<BaseFloat> Lambda_sn(Lambda, dim/2, dim/2, 0, dim/2); 
+  SubMatrix<BaseFloat> Lambda_ss(Lambda, dim/2, dim/2, dim/2, dim/2);
   mu_n_ = mu_n;
   Lambda_n_ = Lambda_nn;
   Lambda_s_ = Lambda_ss;
-  // B = - (Lambda_ss)^-1 Lambda_sn
-  B_.AddMatMat(-1.0, cov_ss_, kNoTrans, Lambda_sn, kNoTrans, 0);
+  Matrix<BaseFloat> Lambda_sn_(Lambda_sn), Lambda_ss_inv(Lambda_ss);
+  Lambda_ss_inv.Invert();
+  // B = - (Lambda_ss_inv)^-1 Lambda_sn
+  Matrix<BaseFloat> temp(dim/2, dim/2);
+  temp.AddMatMat(-1.0, Lambda_ss_inv, kNoTrans, Lambda_sn_, kNoTrans, 0);
+  B_ = temp;
   // a = mu_s - B mu_n
-  a_.CopyFromVec(mu_s);
-  a_.AddMatVec(-1.0, B_, kNoTrans, mu_n_, 1);
+  a_ = mu_s;
+  a_.AddMatVec(-1.0, temp, kNoTrans, mu_n_, 1);
 }
 
 

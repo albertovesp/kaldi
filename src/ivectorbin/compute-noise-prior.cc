@@ -108,7 +108,7 @@ int main(int argc, char *argv[]) {
     ComputeAndSubtractMean(utt2noise_vec, &mean);
     KALDI_LOG << "2-norm of noise vector mean is " << mean.Norm(2.0);
 
-    SpMatrix<BaseFloat> covariance;
+    SpMatrix<BaseFloat> covariance(dim);
     ComputeCovarianceMatrix(utt2noise_vec, &covariance);
     
     NoisePrior noise_prior;

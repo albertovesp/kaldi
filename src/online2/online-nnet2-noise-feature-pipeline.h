@@ -201,17 +201,11 @@ class OnlineNnet2NoiseFeaturePipeline: public OnlineFeatureInterface {
   virtual int32 NumFramesReady() const;
   virtual void GetFrame(int32 frame, VectorBase<BaseFloat> *feat);
 
-  /// You must either always call this as soon as new data becomes available,
-  /// ideally just after calling AcceptWaveform(), or never call it for the
-  /// lifetime of this object.
-  void UpdateFrameWeights(
-      const std::vector<std::pair<int32, BaseFloat> > &delta_weights);
-
   /// Set the adaptation state to a particular value, e.g. reflecting previous
   /// utterances of the same speaker; this will generally be called after
   /// Copy().
   void SetAdaptationState(
-      const OnlineNvectorExtractorAdaptationState &adaptation_state);
+      const OnlineNvectorEstimationParams &adaptation_state);
 
   /// Get the adaptation state; you may want to call this before destroying this
   /// object, to get adaptation state that can be used to improve decoding of
@@ -219,10 +213,10 @@ class OnlineNnet2NoiseFeaturePipeline: public OnlineFeatureInterface {
   /// if you have reason to believe that something went wrong in the recognition
   /// (e.g., low confidence).
   void GetAdaptationState(
-      OnlineNvectorExtractorAdaptationState *adaptation_state) const;
+      OnlineNvectorEstimationParams *adaptation_state) const;
 
   /// Set the CMVN state to a particular value.
-  /// (for features on nnet3 input, not the i-vector input).
+  /// (for features on nnet3 input, not the n-vector input).
   void SetCmvnState(const OnlineCmvnState &cmvn_state);
   void GetCmvnState(OnlineCmvnState *cmvn_state);
 

@@ -25,7 +25,7 @@
 #include "online2/onlinebin-util.h"
 #include "online2/online-gmm-decoding.h"
 #include "online2/online-timing.h"
-#include "online2/online-endpoint.h"
+#include "ivector/online-noise-vector.h"
 #include "fstext/fstext-lib.h"
 #include "lat/lattice-functions.h"
 #include "util/kaldi-thread.h"
@@ -106,10 +106,8 @@ int main(int argc, char *argv[]) {
     OnlineNnet2NoiseFeaturePipelineConfig feature_opts;
     nnet3::NnetSimpleLoopedComputationOptions decodable_opts;
     LatticeFasterDecoderConfig decoder_opts;
-    OnlineEndpointConfig endpoint_opts;
 
     BaseFloat chunk_length_secs = 0.18;
-    bool do_endpointing = false;
     bool online = true;
 
     po.Register("chunk-length", &chunk_length_secs,
@@ -117,8 +115,6 @@ int main(int argc, char *argv[]) {
                 "to use all input in one chunk.");
     po.Register("word-symbol-table", &word_syms_rxfilename,
                 "Symbol table for words [for debug output]");
-    po.Register("do-endpointing", &do_endpointing,
-                "If true, apply endpoint detection");
     po.Register("online", &online,
                 "You can set this to false to disable online n-vector estimation "
                 "and have all the data for each utterance used, even at "
@@ -132,7 +128,6 @@ int main(int argc, char *argv[]) {
     feature_opts.Register(&po);
     decodable_opts.Register(&po);
     decoder_opts.Register(&po);
-    endpoint_opts.Register(&po);
 
 
     po.Read(argc, argv);
@@ -165,6 +160,10 @@ int main(int argc, char *argv[]) {
     if (feature_info.global_cmvn_stats_rxfilename != "")
       ReadKaldiObject(feature_info.global_cmvn_stats_rxfilename,
                       &global_cmvn_stats);
+
+    OnlineNvectorEstimationParams noise_prior;
+    if (noise_prior_rxfilename != "")
+      ReadKaldiObject(noise_prior_rxfilename, &noise_prior);
 
     TransitionModel trans_model;
     nnet3::AmNnetSimple am_nnet;
@@ -208,9 +207,7 @@ int main(int argc, char *argv[]) {
       const std::vector<std::string> &uttlist = spk2utt_reader.Value();
 
       OnlineGmmAdaptationState gmm_adaptation_state;
-      OnlineNvectorExtractorAdaptationState adaptation_state(
-          feature_info.nvector_extractor_info);
-      OnlineCmvnState cmvn_state(global_cmvn_stats);
+      OnlineNvectorEstimationParams adaptation_state(noise_prior);
 
       for (size_t i = 0; i < uttlist.size(); i++) {
         std::string utt = uttlist[i];
@@ -234,10 +231,9 @@ int main(int argc, char *argv[]) {
         feature_pipeline.SetAdaptationState(adaptation_state);
         feature_pipeline.SetCmvnState(cmvn_state);
 
-        OnlineSilenceWeighting silence_weighting(
+        OnlineSilenceDetection silence_detection(
             trans_model,
-            feature_info.silence_weighting_config,
-            decodable_opts.frame_subsampling_factor);
+            feature_info.silence_detection_config);
 
         SingleUtteranceNnet3Decoder nnet3_decoder(decoder_opts, trans_model,
                                             decodable_info,
@@ -254,7 +250,7 @@ int main(int argc, char *argv[]) {
         }
 
         int32 samp_offset = 0;
-        std::vector<std::pair<int32, BaseFloat> > delta_weights;
+        std::vector<std::pair<int32, bool> > silence_frames;
 
         while (samp_offset < data.Dim()) {
           int32 samp_remaining = data.Dim() - samp_offset;
@@ -274,28 +270,22 @@ int main(int argc, char *argv[]) {
             feature_pipeline.InputFinished();
           }
           
-          gmm_decoder.AdvanceDecoding();
-
-          if (silence_weighting.Active() &&
-              feature_pipeline.NvectorFeature() != NULL) {
-            silence_weighting.ComputeCurrentTraceback(decoder.Decoder());
-            silence_weighting.GetDeltaWeights(feature_pipeline.NumFramesReady(),
-                                              &delta_weights);
-            feature_pipeline.NvectorFeature()->UpdateFrameWeights(delta_weights);
+          if (feature_pipeline.NvectorFeature() != NULL) {
+            gmm_decoder.AdvanceDecoding();
+            silence_detection.DecodeNextChunk(gmm_decoder.Decoder());
+            silence_detection.GetSilenceDecisions(feature_pipeline.NumFramesReady(),
+                                              &silence_frames);
+            feature_pipeline.NvectorFeature()->UpdateNvector(silence_frames);
           }
 
           nnet3_decoder.AdvanceDecoding();
 
-          if (do_endpointing && gmm_decoder.EndpointDetected(endpoint_opts)) {
-            break;
-          }
         }
         gmm_decoder.FinalizeDecoding();
         nnet3_decoder.FinalizeDecoding();
 
         CompactLattice clat;
         bool end_of_utterance = true;
-        gmm_decoder.EstimateFmllr(end_of_utterance);
 
         nnet3_decoder.GetLattice(end_of_utterance, &clat);
 

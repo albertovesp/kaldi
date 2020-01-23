@@ -162,7 +162,7 @@ void OnlineNnet2NoiseFeaturePipeline::GetFrame(int32 frame,
 }
 
 void OnlineNnet2NoiseFeaturePipeline::SetAdaptationState(
-    const OnlineNoiseVectorAdaptationState &adaptation_state) {
+    const OnlineNvectorEstimationParams &adaptation_state) {
   if (info_.use_nvectors) {
     nvector_feature_->SetAdaptationState(adaptation_state);
   }
@@ -170,7 +170,7 @@ void OnlineNnet2NoiseFeaturePipeline::SetAdaptationState(
 }
 
 void OnlineNnet2NoiseFeaturePipeline::GetAdaptationState(
-    OnlineNvectorExtractorAdaptationState *adaptation_state) const {
+    OnlineNvectorEstimationParams *adaptation_state) const {
   if (info_.use_nvectors) {
     nvector_feature_->GetAdaptationState(adaptation_state);
   }

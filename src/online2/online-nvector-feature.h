@@ -1,7 +1,6 @@
 // online2/online-nvector-feature.h
 
-// Copyright 2013-2014   Johns Hopkins University (author: Daniel Povey)
-//           2020        Johns Hopkins University (author: Desh Raj)
+// Copyright 2020   Johns Hopkins University (author: Desh Raj)
 
 // See ../../COPYING for clarification regarding multiple authors
 //
@@ -53,19 +52,10 @@ namespace kaldi {
 /// any code should be callable from other code, so we didn't want to force
 /// configuration classes to be read from disk.
 struct OnlineNvectorExtractionConfig {
-  std::string lda_mat_rxfilename;  // to read the LDA+MLLT matrix
-  std::string global_cmvn_stats_rxfilename; // to read matrix of global CMVN
-                                            // stats
-  std::string splice_config_rxfilename;  // to read OnlineSpliceOptions
-  std::string cmvn_config_rxfilename;  // to read in OnlineCmvnOptions
-  bool online_cmvn_iextractor; // flag activating online-cmvn in iextractor
-                               // feature pipeline
+  
   std::string noise_prior_rxfilename;  // reads type NoisePrior
 
-  // the following four configuration values should in principle match those
-  // given to the script extract_ivectors_online.sh, although none of them are
-  // super-critical.
-  int32 ivector_period;  // How frequently we re-estimate n-vectors.
+  int32 nvector_period;  // How frequently we re-estimate n-vectors.
 
   // If use_most_recent_nvector is true, we always return the most recent
   // available noise vector rather than the one for the current frame.  This means
@@ -85,35 +75,15 @@ struct OnlineNvectorExtractionConfig {
   // by calling SetAdaptationState()).
   BaseFloat max_remembered_frames;
 
-  OnlineNvectorExtractionConfig(): online_cmvn_iextractor(false),
-                                   ivector_period(10),
+  OnlineNvectorExtractionConfig(): nvector_period(10),
                                    use_most_recent_nvector(true),
                                    greedy_nvector_extractor(false),
                                    max_remembered_frames(1000) { }
 
   void Register(OptionsItf *opts) {
-    opts->Register("lda-matrix", &lda_mat_rxfilename, "Filename of LDA matrix, "
-                   "e.g. final.mat; used for iVector extraction. ");
-    opts->Register("global-cmvn-stats", &global_cmvn_stats_rxfilename,
-                   "(Extended) filename for global CMVN stats, used in iVector "
-                   "extraction, obtained for example from "
-                   "'matrix-sum scp:data/train/cmvn.scp -', only used for "
-                   "iVector extraction");
-    opts->Register("cmvn-config", &cmvn_config_rxfilename, "Configuration "
-                   "file for online CMVN features (e.g. conf/online_cmvn.conf),"
-                   "only used for iVector extraction.  Contains options "
-                   "as for the program 'apply-cmvn-online'");
-    opts->Register("online-cmvn-iextractor", &online_cmvn_iextractor,
-                   "add online-cmvn to feature pipeline of ivector extractor, "
-                   "use the cmvn setup from the UBM.  Note: the default of "
-                   "false is what we historically used; we'd use true if "
-                   "we were using CMVN'ed features for the neural net.");
-    opts->Register("splice-config", &splice_config_rxfilename, "Configuration file "
-                   "for frame splicing (--left-context and --right-context "
-                   "options); used for iVector extraction.");
     opts->Register("noise-prior", &noise_prior_rxfilename,
                    "Filename of Noise Prior parameter file.");
-    opts->Register("ivector-period", &ivector_period, "Frequency with which "
+    opts->Register("nvector-period", &nvector_period, "Frequency with which "
                    "we extract noise vectors for neural network adaptation");
     opts->Register("use-most-recent-nvector", &use_most_recent_noise_vector, "If true, "
                    "always use most recent available noise vector, rather than the "
@@ -125,8 +95,7 @@ struct OnlineNvectorExtractionConfig {
                    "number of frames of adaptation history that we carry through "
                    "to later utterances of the same speaker (having a finite "
                    "number allows the speaker adaptation state to change over "
-                   "time).  Interpret as a real frame count, i.e. not a count "
-                   "scaled by --posterior-scale.");
+                   "time).");  
   }
 };
 
@@ -134,19 +103,9 @@ struct OnlineNvectorExtractionConfig {
 /// by class OnlineNvectorExtractor.
 struct OnlineNvectorExtractionInfo {
 
-  Matrix<BaseFloat> lda_mat;  // LDA+MLLT matrix.
-  Matrix<double> global_cmvn_stats;  // Global CMVN stats.
+  NoisePrior noise_prior;
 
-  OnlineCmvnOptions cmvn_opts;  // Options for online CMN/CMVN computation.
-  bool online_cmvn_iextractor;  // flag activating online CMN/CMVN for iextractor input.
-  OnlineSpliceOptions splice_opts;  // Options for frame splicing
-                                    // (--left-context,--right-context)
-
-  NvectorExtractor extractor;
-
-  // the following configuration variables are copied from
-  // OnlineNoiseVectorConfig, see comments there.
-  int32 ivector_period;
+  int32 nvector_period;
   bool use_most_recent_nvector;
   bool greedy_nvector_extractor;
   BaseFloat max_remembered_frames;
@@ -164,71 +123,66 @@ struct OnlineNvectorExtractionInfo {
   KALDI_DISALLOW_COPY_AND_ASSIGN(OnlineNvectorExtractionInfo);
 };
 
-/// This class stores the adaptation state from the online iVector extractor,
-/// which can help you to initialize the adaptation state for the next utterance
-/// of the same speaker in a more informed way.
-struct OnlineNoiseVectorAdaptationState {
-  // CMVN state for the features used to get posteriors for noise vector extraction;
-  // online CMVN is not used for the features supplied to the neural net,
-  // instead the noise vector is used.
+/// OnlineNvectorEstimationParams is a class that stores the parameters
+/// required to estimate the online noise vectors. It also stores the 
+/// prior parameters required for initial estimattion of noise vectors.
+/// Further, it contains a method to compute the prior parameters
+/// given the statistics of the training data.
+///
+/// At test time for online decoding, the OnlineNvectorFeature class
+/// initializes its own copy of OnlineNvectorEstimationParams when
+/// SetAdaptationState() function is called, and then updates the
+/// parameters of the copy using an E-M like procedure.
 
-  // Adaptation state for online CMVN (used for getting posteriors for iVector)
-  OnlineCmvnState cmvn_state;
+class OnlineNvectorEstimationParams {
+ public:
+  OnlineNvectorEstimationParams() { }
 
-  /// Stats for online noise vector estimation.
-  OnlineNoiseVectorEstimationStats noise_vector_stats;
+  explicit OnlineNvectorEstimationParams(const OnlineNvectorEstimationParams &other):
+    mu_n_(other.mu_n_),
+    a_(other.a_),
+    B_(other.B_),
+    Lambda_n_(other.Lambda_n_),
+    Lambda_s_(other.Lambda_s_) {
+  };
 
-  /// This constructor initializes adaptation-state with no prior speaker history.
-  OnlineNoiseVectorAdaptationState(const OnlineNoiseVectorInfo &info):
-      cmvn_state(info.global_cmvn_stats),
-      noise_vector_stats(info.extractor.NoiseVectorDim(),
-                    info.extractor.PriorOffset(),
-                    info.max_count) { }
-
-  /// Copy constructor
-  OnlineNoiseVectorAdaptationState(
-      const OnlineNoiseVectorAdaptationState &other);
-
-  /// Scales down the stats if needed to ensure the number of frames in the
-  /// speaker-specific CMVN stats does not exceed max_remembered_frames
-  /// and the data-count in the iVector stats does not exceed
-  /// max_remembered_frames * posterior_scale.  [the posterior_scale
-  /// factor is necessary because those stats have already been scaled
-  /// by that factor.]
-  void LimitFrames(BaseFloat max_remembered_frames,
-                   BaseFloat posterior_scale);
+  /// Takes the mean and covariance matrix computed from the
+  /// training data and estimates the prior parameters.
+  void EstimatePriorParameters(const VectorBase<BaseFloat> &mean,
+                               const SpMatrix<BaseFloat> &covariance,
+                               const int32 dim);
 
   void Write(std::ostream &os, bool binary) const;
   void Read(std::istream &is, bool binary);
+
+ protected:
+  Vector<BaseFloat> mu_n_;  // mean of noise vectors.
+  Vector<BaseFloat> a_;  // shift factor for mean of speech vectors.
+  Matrix<BaseFloat> B_;  // scale factor for mean of speech vectors.
+  Matrix<BaseFloat> Lambda_n_; // precision matrix for noise.
+  Matrix<BaseFloat> Lambda_s_; // precision matrix for speech.
+
+ private:
+  OnlineNvectorEstimationParams &operator = (const OnlineNvectorEstimationParams &other);  // disallow assignment
+
 };
 
-
-
-
-/// OnlineNoiseVectorFeature is an online feature-extraction class that's responsible
+/// OnlineNvectorFeature is an online feature-extraction class that's responsible
 /// for extracting noise vectors from raw features such as MFCC, PLP or filterbank.
 /// Internally it processes the raw features using two different pipelines, one
 /// online-CMVN+splice+LDA, and one just splice+LDA. It gets GMM posteriors from
 /// the CMVN-normalized features, and with those and the unnormalized features
 /// it obtains noise vectors.
 
-class OnlineNoiseVectorFeature: public OnlineFeatureInterface {
+class OnlineNvectorFeature: public OnlineFeatureInterface {
  public:
-  /// Constructor.  base_feature is for example raw MFCC or PLP or filterbank
-  /// features, whatever was used to train the iVector extractor.
+  /// Constructor.  base_feature is for example raw MFCC or PLP or filterbanks.
   /// "info" contains all the configuration information as well as
-  /// things like the iVector extractor that we won't be modifying.
+  /// things like the noise prior that we won't be modifying.
   /// Caution: the class keeps a const reference to "info", so don't
   /// delete it while this class or others copied from it still exist.
-  explicit OnlineNoiseVectorFeature(const OnlineNoiseVectorInfo &info,
+  explicit OnlineNvectorFeature(const OnlineNvectorExtractionInfo &info,
                                 OnlineFeatureInterface *base_feature);
-
-  // This version of the constructor accepts per-frame weights (relates to
-  // downweighting silence).  This is intended for use in offline operation,
-  // i.e. during training.  [will implement this when needed.]
-  //explicit OnlineNoiseVectorFeature(const OnlineNoiseVectorInfo &info,
-  //     std::vector<BaseFloat> frame_weights,
-  //OnlineFeatureInterface *base_feature);
 
 
   // Member functions from OnlineFeatureInterface:
@@ -244,145 +198,78 @@ class OnlineNoiseVectorFeature: public OnlineFeatureInterface {
   /// utterances of the same speaker; this will generally be called after
   /// constructing a new instance of this class.
   void SetAdaptationState(
-      const OnlineNoiseVectorAdaptationState &adaptation_state);
+      const OnlineNvectorEstimationParams &adaptation_state);
 
 
   /// Get the adaptation state; you may want to call this before destroying this
   /// object, to get adaptation state that can be used to improve decoding of
   /// later utterances of this speaker.
   void GetAdaptationState(
-      OnlineNoiseVectorAdaptationState *adaptation_state) const;
+      OnlineNvectorEstimationParams *adaptation_state) const;
 
-  virtual ~OnlineNoiseVectorFeature();
+  virtual ~OnlineNvectorFeature();
 
-  // Objective improvement per frame from iVector estimation, versus default iVector
+  // Objective improvement per frame from noise vector estimation, versus default
   // value, measured at utterance end.
   BaseFloat ObjfImprPerFrame() const;
 
-  // returns number of frames seen (but not counting the posterior-scale).
-  BaseFloat NumFrames() const {
-    return noise_vector_stats_.NumFrames() / info_.posterior_scale;
-  }
-
+  // This function updates current_nvector_  (which is our present estimate)
+  // of the  current value for the n-vector, after a new chunk of 
+  // data is seen. It takes as argument the silence decisions made by the 
+  // GmmDecoder.
+  void UpdateNvector(
+      const std::vector<std::pair<int32, bool> > &silence_frames);
 
  private:
 
-  // This accumulates noise vector stats for a set of frames, specified as pairs
-  // (t, weight).  The weights do not have to be positive.  (In the online
-  // silence-weighting that we do, negative weights can occur if we change our
-  // minds about the assignment of a frame as silence vs. non-silence).
-  void UpdateStatsForFrames(
-      const std::vector<std::pair<int32, BaseFloat> > &frame_weights);
-
-  // This is the original UpdateStatsUntilFrame that is called when there is
-  // no data-weighting involved.
-  void UpdateStatsUntilFrame(int32 frame);
-
-  // This is the new UpdateStatsUntilFrame that is called when there is
-  // data-weighting (i.e. when the user has been calling UpdateFrameWeights()).
-  void UpdateStatsUntilFrameWeighted(int32 frame);
-
   void PrintDiagnostics() const;
 
-  const OnlineNoiseVectorInfo &info_;
+  const OnlineNvectorExtractionInfo &info_;
 
   OnlineFeatureInterface *base_;  // The feature this is built on top of
                                   // (e.g. MFCC); not owned here
-
-  OnlineFeatureInterface *lda_;  // LDA on top of raw+splice features.
-  OnlineCmvn *cmvn_;  // the CMVN that we give to the lda_normalized_.
-  OnlineFeatureInterface *lda_normalized_;  // LDA on top of CMVN+splice
 
   // the following is the pointers to OnlineFeatureInterface objects that are
   // owned here and which we need to delete.
   std::vector<OnlineFeatureInterface*> to_delete_;
 
   /// the noise vector estimation stats
-  OnlineNoiseVectorEstimationStats noise_vector_stats_;
+  OnlineNvectorEstimationStats nvector_stats_;
 
   /// num_frames_stats_ is the number of frames of data we have already
-  /// accumulated from this utterance and put in noise_vector_stats_.  Each frame t <
+  /// accumulated from this utterance and put in nvector_stats_.  Each frame t <
   /// num_frames_stats_ is in the stats.
   int32 num_frames_stats_;
 
-  /// delta_weights_ is written to by UpdateFrameWeights,
-  /// in the case where the iVector estimation is silence-weighted using the decoder
-  /// traceback.  Its elements are consumed by UpdateStatsUntilFrameWeighted().
-  /// We provide std::greater<std::pair<int32, BaseFloat> > > as the comparison type
-  /// (default is std::less) so that the lowest-numbered frame, not the highest-numbered
-  /// one, will be returned by top().
-  std::priority_queue<std::pair<int32, BaseFloat>,
-                      std::vector<std::pair<int32, BaseFloat> >,
-                      std::greater<std::pair<int32, BaseFloat> > > delta_weights_;
-
-  /// this is only used for validating that the frame-weighting code is not buggy.
-  std::vector<BaseFloat> current_frame_weight_debug_;
-
-  /// delta_weights_provided_ is set to true if UpdateFrameWeights was ever called; it's
-  /// used to detect wrong usage of this class.
-  bool delta_weights_provided_;
-  /// The following is also used to detect wrong usage of this class; it's set
-  /// to true if UpdateStatsUntilFrame() was ever called.
-  bool updated_with_no_delta_weights_;
-
-  /// if delta_weights_ was ever called, this keeps track of the most recent
-  /// frame that ever had a weight.  It's mostly for detecting errors.
-  int32 most_recent_frame_with_weight_;
-
-  /// The following is only needed for diagnostics.
-  double tot_ubm_loglike_;
-
-  /// Most recently estimated iVector, will have been
+  /// Most recently estimated noise vector, will have been
   /// estimated at the greatest time t where t <= num_frames_stats_ and
-  /// t % info_.ivector_period == 0.
-  Vector<double> current_ivector_;
+  /// t % info_.nvector_period == 0.
+  Vector<BaseFloat> current_nvector_;
 
-  /// if info_.use_most_recent_ivector == false, we need to store
-  /// the iVector we estimated each info_.ivector_period frames so that
-  /// GetFrame() can return the iVector that was active on that frame.
-  /// ivectors_history_[i] contains the iVector we estimated on
-  /// frame t = i * info_.ivector_period.
-  std::vector<Vector<BaseFloat>* > ivectors_history_;
+  /// if info_.use_most_recent_nvector == false, we need to store
+  /// the n-vector we estimated each info_.nvector_period frames so that
+  /// GetFrame() can return the noise vector that was active on that frame.
+  /// nvectors_history_[i] contains the noise vector we estimated on
+  /// frame t = i * info_.nvector_period.
+  std::vector<Vector<BaseFloat>* > nvectors_history_;
 
 };
 
 
-struct OnlineSilenceWeightingConfig {
+struct OnlineSilenceDetectionConfig {
   std::string silence_phones_str;
-  // The weighting factor that we apply to silence phones in the iVector
-  // extraction.  This option is only relevant if the --silence-phones option is
-  // set.
-  BaseFloat silence_weight;
-
-  // Transition-ids that get repeated at least this many times (if
-  // max_state_duration > 0) are treated as silence.
-  BaseFloat max_state_duration;
-
-  // This is the scale that we apply to data that we don't yet have a decoder
-  // traceback for, in the online silence
-  BaseFloat new_data_weight;
 
   bool Active() const {
     return !silence_phones_str.empty() && silence_weight != 1.0;
   }
 
-  OnlineSilenceWeightingConfig():
+  OnlineSilenceDetectionConfig():
       silence_weight(1.0), max_state_duration(-1) { }
 
   void Register(OptionsItf *opts) {
     opts->Register("silence-phones", &silence_phones_str, "(RE weighting in "
-                   "iVector estimation for online decoding) List of integer ids of "
-                   "silence phones, separated by colons (or commas).  Data that "
-                   "(according to the traceback of the decoder) corresponds to "
-                   "these phones will be downweighted by --silence-weight.");
-    opts->Register("silence-weight", &silence_weight, "(RE weighting in "
-                   "iVector estimation for online decoding) Weighting factor for frames "
-                   "that the decoder trace-back identifies as silence; only "
-                   "relevant if the --silence-phones option is set.");
-    opts->Register("max-state-duration", &max_state_duration, "(RE weighting in "
-                   "iVector estimation for online decoding) Maximum allowed "
-                   "duration of a single transition-id; runs with durations longer "
-                   "than this will be weighted down to the silence-weight.");
+                   "noise vector estimation for online decoding) List of integer ids of "
+                   "silence phones, separated by colons (or commas).");
   }
   // e.g. prefix = "ivector-silence-weighting"
   void RegisterWithPrefix(std::string prefix, OptionsItf *opts) {
@@ -391,12 +278,11 @@ struct OnlineSilenceWeightingConfig {
   }
 };
 
-// This class is responsible for keeping track of the best-path traceback from
-// the decoder (efficiently) and computing a weighting of the data based on the
-// classification of frames as silence (or not silence)... also with a duration
-// limitation, so data from a very long run of the same transition-id will get
-// weighted down.  (this is often associated with misrecognition or silence).
-class OnlineSilenceWeighting {
+
+// This class is responsible for performing speech/silence frame classification
+// which is used for computing means for the online estimation of noise
+// vectors. 
+class OnlineSilenceDetection {
  public:
   // Note: you would initialize a new copy of this object for each new
   // utterance.
@@ -405,24 +291,25 @@ class OnlineSilenceWeighting {
   // frame-rate of the input features.  E.g. you might set it to 3 for such
   // models.
 
-  OnlineSilenceWeighting(const TransitionModel &trans_model,
+  OnlineSilenceDetection(const TransitionModel &trans_model,
                          const OnlineSilenceWeightingConfig &config,
                          int32 frame_subsampling_factor = 1);
 
   bool Active() const { return config_.Active(); }
 
-  // This should be called before GetDeltaWeights, so this class knows about the
+  // This should be called before GetSilenceDecisions, so this class knows about the
   // traceback info from the decoder.  It records the traceback information from
   // the decoder using its BestPathEnd() and related functions.
   // It will be instantiated for FST == fst::Fst<fst::StdArc> and fst::GrammarFst.
   template <typename FST>
-  void ComputeCurrentTraceback(const LatticeFasterOnlineDecoderTpl<FST> &decoder);
+  void DecodeNextChunk(const LatticeFasterOnlineDecoderTpl<FST> &decoder);
 
-  // Calling this function gets the changes in weight that require us to modify
-  // the stats... the output format is (frame-index, delta-weight).
+  // This function outputs speech/silence decision for every frame in the utterance
+  // and the output format is (frame-index, true/false), where true/false refers to
+  // silence/speech frames respectively.
   //
   // The num_frames_ready argument is the number of frames available at
-  // the input (or equivalently, output) of the online iVector feature in the
+  // the input (or equivalently, output) of the online n-vector feature in the
   // feature pipeline from the stream start. It may be more than the currently
   // available decoder traceback.
   //
@@ -432,31 +319,29 @@ class OnlineSilenceWeighting {
   // case of compilation error to reproduce the previous behavior or for a
   // single utterance decoding.
   //
-  // How many frames of weights it outputs depends on how much "num_frames_ready"
+  // How many frames of decisions it outputs depends on how much "num_frames_ready"
   // increased since last time we called this function, and whether the decoder
-  // traceback changed.  Negative delta_weights might occur if frames previously
-  // classified as non-silence become classified as silence if the decoder's
-  // traceback changes.  You must call this function with "num_frames_ready"
+  // traceback changed.  You must call this function with "num_frames_ready"
   // arguments that only increase, not decrease, with time.  You would provide
-  // this output to class OnlineIvectorFeature by calling its function
-  // UpdateFrameWeights with the output.
+  // this output to class OnlineNvectorFeature by calling its function
+  // UpdateNvectors with the output.
   //
   // Returned frame-index is in pipeline frames from the pipeline start.
-  void GetDeltaWeights(
+  void GetSilenceDecisions(
       int32 num_frames_ready, int32 first_decoder_frame,
-      std::vector<std::pair<int32, BaseFloat> > *delta_weights);
+      std::vector<std::pair<int32, bool> > *silence_frames);
 
   // A method for backward compatibility, same as above, but for a single
   // utterance.
-  void GetDeltaWeights(
+  void GetSilenceDecisions(
       int32 num_frames_ready,
-      std::vector<std::pair<int32, BaseFloat> > *delta_weights) {
-    GetDeltaWeights(num_frames_ready, 0, delta_weights);
+      std::vector<std::pair<int32, bool> > *silence_frames) {
+    GetSilenceDecisions(num_frames_ready, 0, silence_frames);
   }
 
  private:
   const TransitionModel &trans_model_;
-  const OnlineSilenceWeightingConfig &config_;
+  const OnlineSilenceDetectionConfig &config_;
 
   int32 frame_subsampling_factor_;
 
@@ -467,12 +352,8 @@ class OnlineSilenceWeighting {
     // trace before the traceback is the same as what we previously traced back.
     void *token;
     int32 transition_id;
-    // current_weight is the weight we've previously told the iVector
-    // extractor to use for this frame, if any.  It may not equal the
-    // weight we "want" it to use (any difference between the two will
-    // be output when the user calls GetDeltaWeights().
-    BaseFloat current_weight;
-    FrameInfo(): token(NULL), transition_id(-1), current_weight(0.0) {}
+    bool silence_decision;
+    FrameInfo(): token(NULL), transition_id(-1), silence_decision(true) {}
   };
 
   // This contains information about any previously computed traceback;
@@ -482,19 +363,10 @@ class OnlineSilenceWeighting {
   // by 'frame_subsampling_factor_' from the frame-rate of the features.
   std::vector<FrameInfo> frame_info_;
 
-  // This records how many frames have been output and that currently reflect
-  // the traceback accurately.  It is used to avoid GetDeltaWeights() having to
-  // visit each frame as far back as t = 0, each time it is called.
-  // GetDeltaWeights() sets this to the number of frames that it output, and
-  // ComputeCurrentTraceback() then reduces it to however far it traced back.
-  // However, we may have to go further back in time than this in order to
-  // properly honor the "max-state-duration" config.  This, if needed, is done
-  // in GetDeltaWeights() before outputting the delta weights.
-  int32 num_frames_output_and_correct_;
 };
 
 
 /// @} End of "addtogroup onlinefeat"
 }  // namespace kaldi
 
-#endif  // KALDI_ONLINE2_ONLINE_IVECTOR_FEATURE_H_
+#endif  // KALDI_ONLINE2_ONLINE_NVECTOR_FEATURE_H_

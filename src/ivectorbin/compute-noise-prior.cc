@@ -20,9 +20,25 @@
 
 #include "base/kaldi-common.h"
 #include "util/common-utils.h"
-#include "ivector/online-noise-vector.h"
+#include "online2/online-nvector-feature.h"
 
 namespace kaldi {
+
+/* This code implements a Bayesian model for online estimation of speech
+ * and noise vectors. First, we estimate the prior parameters from the 
+ * training data:
+ * pi = (mu_n, a, B, Lambda_n, Lambda_s),
+ * where mu_n = mean of noise frames in training set,
+ * a = mu_s + {Lambda_ss}^-1 Lambda_sn mu_n,
+ * B = - {Lambda_ss}^-1 Lambda_sn,
+ * Lambda's are the inverse of the covariance mattrices (i.e., they are the
+ * precision matrices). 
+ * For derivation, see related paper.
+ *
+ * After estimating the prior parameters, at inference time, the posteriors
+ * are computed through an E-M like procedure. The related code can be found
+ * in online2/online-nvector-feature.h.
+*/
 
 void ComputeAndSubtractMean(
     std::map<std::string, Vector<BaseFloat> *> utt2vector,
@@ -111,11 +127,11 @@ int main(int argc, char *argv[]) {
     SpMatrix<BaseFloat> covariance(dim);
     ComputeCovarianceMatrix(utt2noise_vec, &covariance);
     
-    NoisePrior noise_prior;
+    OnlineNvectorEstimationParams noise_prior;
     noise_prior.EstimatePriorParameters(mean, covariance, dim);
 
     WriteKaldiObject(noise_prior, noise_prior_wxfilename, binary);
-    KALDI_LOG << "Wrote NoisePrior parameters to "
+    KALDI_LOG << "Wrote OnlineNvectorEstimationParams parameters to "
               << PrintableWxfilename(noise_prior_wxfilename);
     
     return 0;

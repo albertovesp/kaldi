@@ -276,6 +276,7 @@ int main(int argc, char *argv[]) {
             silence_detection.GetSilenceDecisions(feature_pipeline.NumFramesReady(),
                                               &silence_frames);
             feature_pipeline.NvectorFeature()->UpdateNvector(silence_frames);
+            feature_pipeline.NvectorFeature()->UpdateScalingParams(silence_frames);
           }
 
           nnet3_decoder.AdvanceDecoding();

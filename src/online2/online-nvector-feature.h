@@ -136,14 +136,17 @@ struct OnlineNvectorExtractionInfo {
 
 class OnlineNvectorEstimationParams {
  public:
-  OnlineNvectorEstimationParams() { }
+  OnlineNvectorEstimationParams():
+    r_s_(1), r_n_(1) { }
 
   explicit OnlineNvectorEstimationParams(const OnlineNvectorEstimationParams &other):
     mu_n_(other.mu_n_),
     a_(other.a_),
     B_(other.B_),
     Lambda_n_(other.Lambda_n_),
-    Lambda_s_(other.Lambda_s_) {
+    Lambda_s_(other.Lambda_s_),
+    r_s_(other.r_s_),
+    r_n_(other.r_n_) {
   };
 
   /// Takes the mean and covariance matrix computed from the
@@ -161,6 +164,8 @@ class OnlineNvectorEstimationParams {
   Matrix<BaseFloat> B_;  // scale factor for mean of speech vectors.
   Matrix<BaseFloat> Lambda_n_; // precision matrix for noise.
   Matrix<BaseFloat> Lambda_s_; // precision matrix for speech.
+  double r_s_; // scaling factor for speech.
+  double r_n_; // scaling factor for noise.
 
  private:
   OnlineNvectorEstimationParams &operator = (const OnlineNvectorEstimationParams &other);  // disallow assignment
@@ -209,15 +214,17 @@ class OnlineNvectorFeature: public OnlineFeatureInterface {
 
   virtual ~OnlineNvectorFeature();
 
-  // Objective improvement per frame from noise vector estimation, versus default
-  // value, measured at utterance end.
-  BaseFloat ObjfImprPerFrame() const;
-
   // This function updates current_nvector_  (which is our present estimate)
   // of the  current value for the n-vector, after a new chunk of 
   // data is seen. It takes as argument the silence decisions made by the 
   // GmmDecoder.
   void UpdateNvector(
+      const std::vector<std::pair<int32, bool> > &silence_frames);
+
+  // This function updates the scaling parameters r_s and r_n of the 
+  // noise estimation model. This is done by maximizing the EM
+  // objective. The derivation is not shown here.
+  void UpdateScalingParams(
       const std::vector<std::pair<int32, bool> > &silence_frames);
 
  private:

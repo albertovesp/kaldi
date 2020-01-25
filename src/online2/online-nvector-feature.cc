@@ -182,11 +182,11 @@ void OnlineNvectorFeature::UpdateNvector(
   SubMatrix<BaseFloat> K_11(K, 0, dim, 0, dim), K_12(K, 0, dim, dim, dim),
     K_21(K, dim, dim, 0, dim), K_22(K, dim, dim, dim, dim);
   K_11 = nvector_stats_.Lambda_s_;
-  K_11.Scale(1 + num_speech);
+  K_11.Scale(1 + nvector_stats_.r_s_*num_speech);
   K_12.AddMatMat(-1, nvector_stats_.Lambda_s_, kNoTrans, nvector_stats_.B, kNoTrans, 0);
   K_21.AddMatMat(-1, nvector_stats_.B_, kTrans, nvector_stats_.Lambda_s_, kNoTrans, 0);
   K_22 = nvector_stats_.Lambda_n_;
-  K_22.Scale(1 + num_noise);
+  K_22.Scale(1 + nvector_stats_.r_n_*num_noise);
   Matrix<BaseFloat> temp(dim, dim);
   temp.AddMatMat(1, nvector_stats_.B, kTrans, nvector_stats_.Lambda_s_, kNoTrans, 0);
   K_22.AddMatMat(1, temp, kNoTrans, nvector_stats_.B_, kNoTrans, 1);
@@ -194,10 +194,10 @@ void OnlineNvectorFeature::UpdateNvector(
   // Computing the vector Q
   SubVector<BaseFloat> Q_1(Q, 0, dim), Q_2(Q, dim, dim);
   Vector<BaseFloat> temp = nvector_stats_.a_;
-  temp.AddVec(1, speech_sum);
+  temp.AddVec(nvector_stats_.r_s_, speech_sum);
   Q_1.AddMatVec(0, nvector_stats_.Lambda_s_, kNoTrans, temp);
   temp = nvector_stats_.mu_n_;
-  temp.AddVec(1, noise_sum);
+  temp.AddVec(nvector_stats_.r_n_, noise_sum);
   Q_2.AddMatVec(0, nvector_stats_.Lambda_n_, kNoTrans, temp);
   temp.AddMatVec(0, nvector_stats_.Lambda_s_, kNoTrans, nvector_stats_.a_);
   Q_2.AddMatVec(1, nvector_stats_.B_, kTrans, temp);
@@ -206,6 +206,34 @@ void OnlineNvectorFeature::UpdateNvector(
   K.Invert();
   current_nvector_.AddMatVec(0, K, kNoTrans, Q);
   nvectors_history_.push_back(current_nvector_);
+}
+
+OnlineNvectorFeature::UpdateScalingParams(
+    const std::vector<std::pair<int32, bool> > &silence_frames) {
+  int32 num_speech = 0, num_noise = 0, dim = this->Dim();
+  Matrix<BaseFloat> speech_var(dim, dim), noise_var(dim, dim);
+  
+  Vector<BaseFloat> cur_frame;
+  std::vector<std::pair<int32, bool> >::iterator it;
+  for (it = silence_frames.begin(); it != silence_frames.end(); it++) {
+    base_->GetFrame(it->first, &cur_frame);
+    if (it->second == true) {
+      // This is a noise frame
+      num_noise++;
+      cur_frame.AddVec(-1.0, current_nvector_);
+      noise_var.AddVecVec(1.0, cur_frame, cur_frame);  
+    } else {
+      // This is a speech frame
+      num_speech++;
+      cur_frame.AddVec(-1.0, current_nvector_);
+      speech_var.AddVecVec(1.0, cur_frame, cur_frame);
+    }
+  }
+
+  nvector_stats_.r_s_ = (dim * num_speech) / 
+    TraceMatMat(nvector_stats_.Lambda_s_, speech_var);
+  nvector_stats_.r_n_ = (dim * num_noise) / 
+    TraceMatMat(nvector_stats_.Lambda_n_, noise_var);
 }
 
 OnlineNvectorFeature::~OnlineNvectorFeature() {

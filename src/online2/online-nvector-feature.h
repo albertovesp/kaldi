@@ -53,18 +53,9 @@ namespace kaldi {
 /// configuration classes to be read from disk.
 struct OnlineNvectorExtractionConfig {
   
-  std::string noise_prior_rxfilename;  // reads type NoisePrior
+  std::string noise_prior_rxfilename;  // reads type OnlineNvectorEstimationStats
 
   int32 nvector_period;  // How frequently we re-estimate n-vectors.
-
-  // If use_most_recent_nvector is true, we always return the most recent
-  // available noise vector rather than the one for the current frame.  This means
-  // that if audio is coming in faster than we can process it, we will return a
-  // more accurate noise vector.
-  bool use_most_recent_nvector;
-
-  // If true, always read ahead to NumFramesReady() when getting n-vector stats.
-  bool greedy_nvector_extractor;
 
   // max_remembered_frames is the largest number of frames it will remember
   // between utterances of the same speaker; this affects the output of
@@ -76,8 +67,6 @@ struct OnlineNvectorExtractionConfig {
   BaseFloat max_remembered_frames;
 
   OnlineNvectorExtractionConfig(): nvector_period(10),
-                                   use_most_recent_nvector(true),
-                                   greedy_nvector_extractor(false),
                                    max_remembered_frames(1000) { }
 
   void Register(OptionsItf *opts) {
@@ -85,12 +74,6 @@ struct OnlineNvectorExtractionConfig {
                    "Filename of Noise Prior parameter file.");
     opts->Register("nvector-period", &nvector_period, "Frequency with which "
                    "we extract noise vectors for neural network adaptation");
-    opts->Register("use-most-recent-nvector", &use_most_recent_noise_vector, "If true, "
-                   "always use most recent available noise vector, rather than the "
-                   "one for the designated frame.");
-    opts->Register("greedy-nvector-extractor", &greedy_noise_vector_extractor, "If "
-                   "true, 'read ahead' as many frames as we currently have available "
-                   "when extracting the noise vector.");
     opts->Register("max-remembered-frames", &max_remembered_frames, "The maximum "
                    "number of frames of adaptation history that we carry through "
                    "to later utterances of the same speaker (having a finite "
@@ -106,8 +89,6 @@ struct OnlineNvectorExtractionInfo {
   NoisePrior noise_prior;
 
   int32 nvector_period;
-  bool use_most_recent_nvector;
-  bool greedy_nvector_extractor;
   BaseFloat max_remembered_frames;
 
   OnlineNvectorExtractionInfo(const OnlineNvectorExtractionConfig &config);

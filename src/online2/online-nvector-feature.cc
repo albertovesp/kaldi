@@ -29,13 +29,6 @@ OnlineNvectorExtractionInfo::OnlineNvectorExtractionInfo(
 void OnlineNvectorExtractionInfo::Init(
     const OnlineNvectorExtractionConfig &config) {
   nvector_period = config.nvector_period;
-  use_most_recent_nvector = config.use_most_recent_nvector;
-  greedy_nvector_extractor = config.greedy_nvector_extractor;
-  if (greedy_nvector_extractor && !use_most_recent_nvector) {
-    KALDI_WARN << "--greedy-nvector-extractor=true implies "
-               << "--use-most-recent-nvector=true";
-    use_most_recent_nvector = true;
-  }
   max_remembered_frames = config.max_remembered_frames;
 
   std::string note = "(note: this may be needed "
@@ -53,8 +46,7 @@ void OnlineNvectorExtractionInfo::Check() const {
 
 // The class constructed in this way should never be used.
 OnlineNvectorExtractionInfo::OnlineNvectorExtractionInfo():
-    nvector_period(0), use_most_recent_nvector(true), 
-    greedy_nvector_extractor(false), max_remembered_frames(0) { }
+    nvector_period(0), max_remembered_frames(0) { }
 
 
 void OnlineNvectorEstimationParams::Write(std::ostream &os, bool binary) const {

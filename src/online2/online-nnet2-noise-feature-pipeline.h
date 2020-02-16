@@ -84,10 +84,15 @@ struct OnlineNnet2NoiseFeaturePipelineConfig {
   // compute-and-process-kaldi-pitch-feats.
   std::string online_pitch_config;
 
-  // The configuration variables in ivector_extraction_config relate to the
-  // iVector extractor and options related to it, see type
-  // OnlineNoiseVectorConfig.
-  std::string noise_vector_config;
+  // The configuration variables in nvector_extraction_config relate to the
+  // noise vector extractor and options related to it, see type
+  // OnlineNvectorExtractionConfig.
+  std::string nvector_extraction_config;
+
+  // The configuration variables in silence_detection_config relate to the
+  // online silence detection and options related to it, see type
+  // OnlineSilenceDetectionConfig.
+  std::string silence_detection_config;
 
   OnlineNnet2NoiseFeaturePipelineConfig():
       feature_type("mfcc"), add_pitch(false) { }
@@ -116,19 +121,20 @@ struct OnlineNnet2NoiseFeaturePipelineConfig {
                    "conf/online_pitch.conf)");
     opts->Register("nvector-extraction-config", &nvector_extraction_config,
                    "Configuration file for online noise vector extraction, "
-                   "see class OnlineNoiseVectorConfig in the code");
+                   "see class OnlineNvectorExtractionConfig in the code");
+    opts->Register("silence-detection-config", &silence_detection_config,
+                   "Configuration file for online silence detection");
   }
 };
 
 
 /// This class is responsible for storing configuration variables, objects and
-/// options for OnlineNnet2NoiseFeaturePipeline (including the actual LDA and
-/// CMVN-stats matrices, and the noise vector extractor, which is a member of
-/// noise_vector_info.  This class does not register options on the command
-/// line; instead, it is initialized from class OnlineNnet2NoiseFeaturePipelineConfig
-/// which reads the options from the command line.  The reason for structuring
-/// it this way is to make it easier to configure from code as well as from the
-/// command line, as well as for easier multithreaded operation.
+/// options for OnlineNnet2NoiseFeaturePipeline. This class does not register
+/// options on the command line; instead, it is initialized from class
+/// OnlineNnet2NoiseFeaturePipelineConfig which reads the options from the command
+/// line.  The reason for structuring it this way is to make it easier to
+/// configure from code as well as from the command line, as well as for easier
+/// multithreaded operation.
 struct OnlineNnet2NoiseFeaturePipelineInfo {
   OnlineNnet2NoiseFeaturePipelineInfo():
       feature_type("mfcc"), add_pitch(false), use_cmvn(false) { }
@@ -163,7 +169,6 @@ struct OnlineNnet2NoiseFeaturePipelineInfo {
   bool use_nvectors;
   OnlineNvectorExtractionInfo nvector_extraction_info;
 
-  int32 NvectorDim() { return nvector_extraction_info.extractor.NvectorDim(); }
  private:
   KALDI_DISALLOW_COPY_AND_ASSIGN(OnlineNnet2NoiseFeaturePipelineInfo);
 };
@@ -280,7 +285,7 @@ class OnlineNnet2NoiseFeaturePipeline: public OnlineFeatureInterface {
   /// to the same address as feature_plus_optional_pitch_.
   OnlineFeatureInterface *feature_plus_optional_cmvn_;
 
-  OnlineNoiseVectorFeature *nvector_feature_;  /// noise vector feature, if used.
+  OnlineNvectorFeature *nvector_feature_;  /// noise vector feature, if used.
 
   /// Part of the feature pipeline that would be given as the primary
   /// (non-noise-vector) input to the neural network in nnet3 applications.

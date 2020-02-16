@@ -79,7 +79,7 @@ OnlineNnet2NoiseFeaturePipelineInfo::OnlineNnet2NoiseFeaturePipelineInfo(
     OnlineNvectorExtractionConfig nvector_extraction_opts;
     ReadConfigFromFile(config.nvector_extraction_config,
                        &nvector_extraction_opts);
-    nvector_extractor_info.Init(nvector_extraction_opts);
+    nvector_extraction_info.Init(nvector_extraction_opts);
   } else {
     use_nvectors = false;
   }
@@ -133,7 +133,7 @@ OnlineNnet2NoiseFeaturePipeline::OnlineNnet2NoiseFeaturePipeline(
     nnet3_feature_ = feature_plus_optional_cmvn_;
     // Note: the noise vector extractor OnlineNvectorFeature gets 'base_feautre_'
     // without cmvn (the online cmvn is applied inside the class)
-    nvector_feature_ = new OnlineNvectorFeature(info_.nvector_extractor_info,
+    nvector_feature_ = new OnlineNvectorFeature(info_.nvector_extraction_info,
                                                 base_feature_);
     final_feature_ = new OnlineAppendFeature(feature_plus_optional_cmvn_,
                                              nvector_feature_);

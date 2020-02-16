@@ -48,7 +48,6 @@ void OnlineNvectorExtractionInfo::Check() const {
 OnlineNvectorExtractionInfo::OnlineNvectorExtractionInfo():
     nvector_period(0), max_remembered_frames(0) { }
 
-
 void OnlineNvectorEstimationParams::Write(std::ostream &os, bool binary) const {
   WriteToken(os, binary, "<OnlineNvectorEstimationParams>");
   mu_n_.Write(os, binary);
@@ -97,11 +96,9 @@ void OnlineNvectorEstimationParams::EstimatePriorParameters(
 
 OnlineNvectorFeature::OnlineNvectorFeature(
     const OnlineNvectorExtractionInfo &info,
-    OnlineFeatureInterface *base_feature,
-    OnlineNvectorEstimationStats *adaptation_state):
+    OnlineFeatureInterface *base_feature):
     info_(info),
     base_(base_feature),
-    nvector_stats_(adaptation_state),
     num_frames_stats_(0) {
   info.Check();
   KALDI_ASSERT(base_feature != NULL);
@@ -109,7 +106,7 @@ OnlineNvectorFeature::OnlineNvectorFeature(
 }
 
 int32 OnlineNvectorFeature::Dim() const {
-  return info_.extractor.NvectorDim();
+  return 2*base_->Dim();
 }
 
 bool OnlineNvectorFeature::IsLastFrame(int32 frame) const {
@@ -117,7 +114,6 @@ bool OnlineNvectorFeature::IsLastFrame(int32 frame) const {
 }
 
 int32 OnlineNvectorFeature::NumFramesReady() const {
-  KALDI_ASSERT(lda_ != NULL);
   return base_->NumFramesReady();
 }
 
@@ -126,14 +122,14 @@ BaseFloat OnlineNvectorFeature::FrameShiftInSeconds() const {
 }
 
 void OnlineNvectorFeature::GetAdaptationState(
-    OnlineNvectorEstimationStats *adaptation_state) const {
-  adaptation_state = nvector_stats_;
+    OnlineNvectorEstimationParams *adaptation_state) const {
+  *adaptation_state = this->nvector_stats_;
 }
 
 
 void OnlineNvectorFeature::SetAdaptationState(
-    const OnlineNvectorEstimationStats &adaptation_state) {
-  nvector_stats_ = adaptation_state;
+    const OnlineNvectorEstimationParams &adaptation_state) {
+  this->nvector_stats_ = adaptation_state;
 }
 
 void OnlineNvectorFeature::UpdateNvector(
@@ -148,9 +144,9 @@ void OnlineNvectorFeature::UpdateNvector(
   Matrix<BaseFloat> speech_var(dim, dim), noise_var(dim, dim);
   Vector<BaseFloat> cur_frame;
   // Check that we have the frames we need to perform the computations
-  KALDI_ASSERT(NumFramesReady() >= silence_frames.back()->first);
+  KALDI_ASSERT(NumFramesReady() >= silence_frames.back().first);
 
-  std::vector<std::pair<int32, bool> >::iterator it;
+  std::vector<std::pair<int32, bool> >::const_iterator it;
   for (it = silence_frames.begin(); it != silence_frames.end(); it++) {
     base_->GetFrame(it->first, &cur_frame);
     if (it->second == true) {
@@ -173,40 +169,55 @@ void OnlineNvectorFeature::UpdateNvector(
   // Computing the matrix K
   SubMatrix<BaseFloat> K_11(K, 0, dim, 0, dim), K_12(K, 0, dim, dim, dim),
     K_21(K, dim, dim, 0, dim), K_22(K, dim, dim, dim, dim);
-  K_11 = nvector_stats_.Lambda_s_;
-  K_11.Scale(1 + nvector_stats_.r_s_*num_speech);
-  K_12.AddMatMat(-1, nvector_stats_.Lambda_s_, kNoTrans, nvector_stats_.B, kNoTrans, 0);
-  K_21.AddMatMat(-1, nvector_stats_.B_, kTrans, nvector_stats_.Lambda_s_, kNoTrans, 0);
-  K_22 = nvector_stats_.Lambda_n_;
+  K_11.AddMat(1.0, nvector_stats_.Lambda_s_);
+  K_11.Scale(1.0 + nvector_stats_.r_s_*num_speech);
+  K_12.AddMatMat(-1.0, nvector_stats_.Lambda_s_, kNoTrans, nvector_stats_.B_, kNoTrans, 0);
+  K_21.AddMatMat(-1.0, nvector_stats_.B_, kTrans, nvector_stats_.Lambda_s_, kNoTrans, 0);
+  K_22.AddMat(1.0, nvector_stats_.Lambda_n_);
   K_22.Scale(1 + nvector_stats_.r_n_*num_noise);
-  Matrix<BaseFloat> temp(dim, dim);
-  temp.AddMatMat(1, nvector_stats_.B, kTrans, nvector_stats_.Lambda_s_, kNoTrans, 0);
-  K_22.AddMatMat(1, temp, kNoTrans, nvector_stats_.B_, kNoTrans, 1);
-  
+  {
+    Matrix<BaseFloat> temp(dim, dim);
+    temp.AddMatMat(1.0, nvector_stats_.B_, kTrans, nvector_stats_.Lambda_s_, kNoTrans, 0);
+    K_22.AddMatMat(1.0, temp, kNoTrans, nvector_stats_.B_, kNoTrans, 1);
+  }
+
   // Computing the vector Q
   SubVector<BaseFloat> Q_1(Q, 0, dim), Q_2(Q, dim, dim);
-  Vector<BaseFloat> temp = nvector_stats_.a_;
-  temp.AddVec(nvector_stats_.r_s_, speech_sum);
-  Q_1.AddMatVec(0, nvector_stats_.Lambda_s_, kNoTrans, temp);
-  temp = nvector_stats_.mu_n_;
-  temp.AddVec(nvector_stats_.r_n_, noise_sum);
-  Q_2.AddMatVec(0, nvector_stats_.Lambda_n_, kNoTrans, temp);
-  temp.AddMatVec(0, nvector_stats_.Lambda_s_, kNoTrans, nvector_stats_.a_);
-  Q_2.AddMatVec(1, nvector_stats_.B_, kTrans, temp);
-  
+  {
+    Vector<BaseFloat> temp = nvector_stats_.a_;
+    temp.AddVec(nvector_stats_.r_s_, speech_sum);
+    Q_1.AddMatVec(1.0, nvector_stats_.Lambda_s_, kNoTrans, temp, 0.0);
+  }
+  {
+    Vector<BaseFloat> temp = nvector_stats_.mu_n_;
+    temp.AddVec(nvector_stats_.r_n_, noise_sum);
+    Q_2.AddMatVec(1.0, nvector_stats_.Lambda_n_, kNoTrans, temp, 0.0);
+    temp.AddMatVec(0.0, nvector_stats_.Lambda_s_, kNoTrans, nvector_stats_.a_, 1.0);
+    Q_2.AddMatVec(1.0, nvector_stats_.B_, kTrans, temp, 1.0);
+  }
+
   // Compute the nvector from K and Q
   K.Invert();
-  current_nvector_.AddMatVec(0, K, kNoTrans, Q);
-  nvectors_history_.push_back(current_nvector_);
+  current_nvector_.AddMatVec(1.0, K, kNoTrans, Q, 0.0);
+  nvectors_history_.push_back(new Vector<BaseFloat>(current_nvector_));
 }
 
-OnlineNvectorFeature::UpdateScalingParams(
+void OnlineNvectorFeature::GetFrame(int32 frame,
+                                    VectorBase<BaseFloat> *feat) {
+  KALDI_ASSERT(feat->Dim() == this->Dim());
+
+	int32 i = frame / info_.nvector_period;  // rounds down.
+	KALDI_ASSERT(static_cast<size_t>(i) <  nvectors_history_.size());
+	feat->CopyFromVec(*(nvectors_history_[i]));
+}
+
+void OnlineNvectorFeature::UpdateScalingParams(
     const std::vector<std::pair<int32, bool> > &silence_frames) {
   int32 num_speech = 0, num_noise = 0, dim = this->Dim();
   Matrix<BaseFloat> speech_var(dim, dim), noise_var(dim, dim);
   
   Vector<BaseFloat> cur_frame;
-  std::vector<std::pair<int32, bool> >::iterator it;
+  std::vector<std::pair<int32, bool> >::const_iterator it;
   for (it = silence_frames.begin(); it != silence_frames.end(); it++) {
     base_->GetFrame(it->first, &cur_frame);
     if (it->second == true) {
@@ -229,7 +240,6 @@ OnlineNvectorFeature::UpdateScalingParams(
 }
 
 OnlineNvectorFeature::~OnlineNvectorFeature() {
-  PrintDiagnostics();
   // Delete objects owned here.
   for (size_t i = 0; i < to_delete_.size(); i++)
     delete to_delete_[i];
@@ -244,7 +254,7 @@ OnlineSilenceDetection::OnlineSilenceDetection(
     int32 frame_subsampling_factor):
     trans_model_(trans_model), config_(config),
     frame_subsampling_factor_(frame_subsampling_factor),
-    num_frames_output_and_correct_(0) {
+    max_state_duration_(config.max_state_duration) {
   KALDI_ASSERT(frame_subsampling_factor_ >= 1);
   std::vector<int32> silence_phones;
   SplitStringToIntegers(config.silence_phones_str, ":,", false,
@@ -359,12 +369,12 @@ void OnlineSilenceDetection::GetSilenceDecisions(
         if (is_silence)
           frame_decisions[offset] = true;
         // now deal with max-duration issues.
-        if (max_state_duration > 0 &&
+        if (max_state_duration_ > 0 &&
             (offset + 1 == frames_out ||
              transition_id != frame_info_[frame + 1].transition_id)) {
           // If this is the last frame of a run...
           int32 run_length = offset - current_run_start_offset + 1;
-          if (run_length >= max_state_duration) {
+          if (run_length >= max_state_duration_) {
             // treat runs of the same transition-id longer than the max, as
             // silence, even if they were not silence.
             for (int32 offset2 = current_run_start_offset;

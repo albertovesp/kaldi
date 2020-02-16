@@ -5,8 +5,11 @@ include ../kaldi.mk
 
 TESTFILES =
 
-OBJFILES = online-gmm-decodable.o online-feature-pipeline.o online-ivector-feature.o \
-           online-nnet2-feature-pipeline.o online-gmm-decoding.o online-timing.o \
+OBJFILES = online-gmm-decodable.o online-feature-pipeline.o \
+           online-ivector-feature.o online-nvector-feature.o \
+           online-nnet2-feature-pipeline.o  \
+           online-nnet2-noise-feature-pipeline.o \
+           online-gmm-decoding.o online-timing.o \
            online-endpoint.o onlinebin-util.o online-speex-wrapper.o \
            online-nnet2-decoding.o online-nnet2-decoding-threaded.o \
            online-nnet3-decoding.o online-nnet3-incremental-decoding.o

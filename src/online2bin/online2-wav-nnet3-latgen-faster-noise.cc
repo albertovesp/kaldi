@@ -25,7 +25,6 @@
 #include "online2/onlinebin-util.h"
 #include "online2/online-gmm-decoding.h"
 #include "online2/online-timing.h"
-#include "ivector/online-noise-vector.h"
 #include "fstext/fstext-lib.h"
 #include "lat/lattice-functions.h"
 #include "util/kaldi-thread.h"
@@ -100,35 +99,25 @@ int main(int argc, char *argv[]) {
 
     std::string word_syms_rxfilename;
 
-    // feature_opts includes configuration for the n-vector adaptation,
-    // as well as the basic features.
-    OnlineGmmDecodingConfig decode_config;
+    // feature_opts includes configuration for n-vector extraction
+    // and silence detection, as well as the basic features.
     OnlineNnet2NoiseFeaturePipelineConfig feature_opts;
     nnet3::NnetSimpleLoopedComputationOptions decodable_opts;
+    OnlineGmmDecodingConfig gmm_decode_config;
     LatticeFasterDecoderConfig decoder_opts;
 
     BaseFloat chunk_length_secs = 0.18;
-    bool online = true;
 
     po.Register("chunk-length", &chunk_length_secs,
                 "Length of chunk size in seconds, that we process.  Set to <= 0 "
                 "to use all input in one chunk.");
     po.Register("word-symbol-table", &word_syms_rxfilename,
                 "Symbol table for words [for debug output]");
-    po.Register("online", &online,
-                "You can set this to false to disable online n-vector estimation "
-                "and have all the data for each utterance used, even at "
-                "utterance start.  This is useful where you just want the best "
-                "results and don't care about online operation.  Setting this to "
-                "false has the same effect as setting "
-                "--use-most-recent-nvector=true and --greedy-nvector-extractor=true "
-                "in the file given to --nvector-extraction-config, and "
-                "--chunk-length=-1.");
 
     feature_opts.Register(&po);
     decodable_opts.Register(&po);
+    gmm_decode_config.Register(&po);
     decoder_opts.Register(&po);
-
 
     po.Read(argc, argv);
 
@@ -149,12 +138,6 @@ int main(int argc, char *argv[]) {
     OnlineNnet2NoiseFeaturePipelineInfo feature_info(feature_opts);
     // The following object initializes the models we use in decoding.
     OnlineGmmDecodingModels gmm_models(decode_config);
-
-    if (!online) {
-      feature_info.nvector_extractor_info.use_most_recent_nvector = true;
-      feature_info.nvector_extractor_info.greedy_nvector_extractor = true;
-      chunk_length_secs = -1.0;
-    }
 
     Matrix<double> global_cmvn_stats;
     if (feature_info.global_cmvn_stats_rxfilename != "")
@@ -208,6 +191,10 @@ int main(int argc, char *argv[]) {
 
       OnlineGmmAdaptationState gmm_adaptation_state;
       OnlineNvectorEstimationParams adaptation_state(noise_prior);
+      OnlineCmvnState cmvn_state(global_cmvn_stats);
+      OnlineSilenceDetection silence_detection(trans_model,
+          feature_info.silence_detection_config);
+
 
       for (size_t i = 0; i < uttlist.size(); i++) {
         std::string utt = uttlist[i];
@@ -230,10 +217,6 @@ int main(int argc, char *argv[]) {
         OnlineNnet2NoiseFeaturePipeline feature_pipeline(feature_info);
         feature_pipeline.SetAdaptationState(adaptation_state);
         feature_pipeline.SetCmvnState(cmvn_state);
-
-        OnlineSilenceDetection silence_detection(
-            trans_model,
-            feature_info.silence_detection_config);
 
         SingleUtteranceNnet3Decoder nnet3_decoder(decoder_opts, trans_model,
                                             decodable_info,
@@ -311,7 +294,7 @@ int main(int argc, char *argv[]) {
         num_done++;
       }
     }
-    timing_stats.Print(online);
+    timing_stats.Print(true);
 
     KALDI_LOG << "Decoded " << num_done << " utterances, "
               << num_err << " with errors.";

@@ -31,7 +31,6 @@
 #include "itf/online-feature-itf.h"
 #include "gmm/diag-gmm.h"
 #include "feat/online-feature.h"
-#include "ivector/online-noise-vector.h"
 #include "decoder/lattice-faster-online-decoder.h"
 
 namespace kaldi {
@@ -53,7 +52,7 @@ namespace kaldi {
 /// configuration classes to be read from disk.
 struct OnlineNvectorExtractionConfig {
   
-  std::string noise_prior_rxfilename;  // reads type OnlineNvectorEstimationStats
+  std::string noise_prior_rxfilename;  // reads type OnlineNvectorEstimationParams
 
   int32 nvector_period;  // How frequently we re-estimate n-vectors.
 
@@ -71,7 +70,7 @@ struct OnlineNvectorExtractionConfig {
 
   void Register(OptionsItf *opts) {
     opts->Register("noise-prior", &noise_prior_rxfilename,
-                   "Filename of Noise Prior parameter file.");
+                   "Filename of prior parameters estimated from training data.");
     opts->Register("nvector-period", &nvector_period, "Frequency with which "
                    "we extract noise vectors for neural network adaptation");
     opts->Register("max-remembered-frames", &max_remembered_frames, "The maximum "
@@ -82,27 +81,8 @@ struct OnlineNvectorExtractionConfig {
   }
 };
 
-/// This struct contains various things that are needed (as const references)
-/// by class OnlineNvectorExtractor.
-struct OnlineNvectorExtractionInfo {
-
-  NoisePrior noise_prior;
-
-  int32 nvector_period;
-  BaseFloat max_remembered_frames;
-
-  OnlineNvectorExtractionInfo(const OnlineNvectorExtractionConfig &config);
-
-  void Init(const OnlineNvectorExtractionConfig &config);
-
-  // This constructor creates a version of this object where everything
-  // is empty or zero.
-  OnlineNvectorExtractionInfo();
-
-  void Check() const;
- private:
-  KALDI_DISALLOW_COPY_AND_ASSIGN(OnlineNvectorExtractionInfo);
-};
+// forward declaration
+class OnlineNvectorFeature;
 
 /// OnlineNvectorEstimationParams is a class that stores the parameters
 /// required to estimate the online noise vectors. It also stores the 
@@ -116,6 +96,8 @@ struct OnlineNvectorExtractionInfo {
 /// parameters of the copy using an E-M like procedure.
 
 class OnlineNvectorEstimationParams {
+ friend class OnlineNvectorFeature;
+
  public:
   OnlineNvectorEstimationParams():
     r_s_(1), r_n_(1) { }
@@ -129,6 +111,11 @@ class OnlineNvectorEstimationParams {
     r_s_(other.r_s_),
     r_n_(other.r_n_) {
   };
+
+  // Assignment operator used for GetAdaptationState() and SetAdaptationState() methods
+  OnlineNvectorEstimationParams &operator = (const OnlineNvectorEstimationParams &other) {
+    return *this;
+  }
 
   /// Takes the mean and covariance matrix computed from the
   /// training data and estimates the prior parameters.
@@ -148,10 +135,31 @@ class OnlineNvectorEstimationParams {
   double r_s_; // scaling factor for speech.
   double r_n_; // scaling factor for noise.
 
- private:
-  OnlineNvectorEstimationParams &operator = (const OnlineNvectorEstimationParams &other);  // disallow assignment
-
 };
+
+// This struct contains various things that are needed by the 
+// OnlineNvectorEstimationParams class for extracting noise
+// vectors.
+struct OnlineNvectorExtractionInfo {
+
+  OnlineNvectorEstimationParams noise_prior;
+
+  int32 nvector_period;
+  BaseFloat max_remembered_frames;
+
+  OnlineNvectorExtractionInfo(const OnlineNvectorExtractionConfig &config);
+
+  void Init(const OnlineNvectorExtractionConfig &config);
+
+  // This constructor creates a version of this object where everything
+  // is empty or zero.
+  OnlineNvectorExtractionInfo();
+
+  void Check() const;
+ private:
+  KALDI_DISALLOW_COPY_AND_ASSIGN(OnlineNvectorExtractionInfo);
+};
+
 
 /// OnlineNvectorFeature is an online feature-extraction class that's responsible
 /// for extracting noise vectors from raw features such as MFCC, PLP or filterbank.
@@ -222,7 +230,7 @@ class OnlineNvectorFeature: public OnlineFeatureInterface {
   std::vector<OnlineFeatureInterface*> to_delete_;
 
   /// the noise vector estimation stats
-  OnlineNvectorEstimationStats nvector_stats_;
+  OnlineNvectorEstimationParams nvector_stats_;
 
   /// num_frames_stats_ is the number of frames of data we have already
   /// accumulated from this utterance and put in nvector_stats_.  Each frame t <
@@ -246,13 +254,13 @@ class OnlineNvectorFeature: public OnlineFeatureInterface {
 
 struct OnlineSilenceDetectionConfig {
   std::string silence_phones_str;
+  int32 max_state_duration;
 
   bool Active() const {
-    return !silence_phones_str.empty() && silence_weight != 1.0;
+    return !silence_phones_str.empty();
   }
 
-  OnlineSilenceDetectionConfig():
-      silence_weight(1.0), max_state_duration(-1) { }
+  OnlineSilenceDetectionConfig(): max_state_duration(-1) { }
 
   void Register(OptionsItf *opts) {
     opts->Register("silence-phones", &silence_phones_str, "(RE weighting in "
@@ -280,7 +288,7 @@ class OnlineSilenceDetection {
   // models.
 
   OnlineSilenceDetection(const TransitionModel &trans_model,
-                         const OnlineSilenceWeightingConfig &config,
+                         const OnlineSilenceDetectionConfig &config,
                          int32 frame_subsampling_factor = 1);
 
   bool Active() const { return config_.Active(); }
@@ -334,6 +342,7 @@ class OnlineSilenceDetection {
   int32 frame_subsampling_factor_;
 
   unordered_set<int32> silence_phones_;
+  int32 max_state_duration_;
 
   struct FrameInfo {
     // The only reason we need the token pointer is to know far back we have to

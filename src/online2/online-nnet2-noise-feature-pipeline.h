@@ -92,7 +92,7 @@ struct OnlineNnet2NoiseFeaturePipelineConfig {
   // The configuration variables in silence_detection_config relate to the
   // online silence detection and options related to it, see type
   // OnlineSilenceDetectionConfig.
-  std::string silence_detection_config;
+  OnlineSilenceDetectionConfig silence_detection_config;
 
   OnlineNnet2NoiseFeaturePipelineConfig():
       feature_type("mfcc"), add_pitch(false) { }
@@ -122,8 +122,6 @@ struct OnlineNnet2NoiseFeaturePipelineConfig {
     opts->Register("nvector-extraction-config", &nvector_extraction_config,
                    "Configuration file for online noise vector extraction, "
                    "see class OnlineNvectorExtractionConfig in the code");
-    opts->Register("silence-detection-config", &silence_detection_config,
-                   "Configuration file for online silence detection");
   }
 };
 
@@ -168,6 +166,8 @@ struct OnlineNnet2NoiseFeaturePipelineInfo {
   /// anticipate running this setup without noise vectors.
   bool use_nvectors;
   OnlineNvectorExtractionInfo nvector_extraction_info;
+
+  OnlineSilenceDetectionConfig silence_detection_config;
 
  private:
   KALDI_DISALLOW_COPY_AND_ASSIGN(OnlineNnet2NoiseFeaturePipelineInfo);

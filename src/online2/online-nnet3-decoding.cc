@@ -42,6 +42,22 @@ SingleUtteranceNnet3DecoderTpl<FST>::SingleUtteranceNnet3DecoderTpl(
 }
 
 template <typename FST>
+SingleUtteranceNnet3DecoderTpl<FST>::SingleUtteranceNnet3DecoderTpl(
+    const LatticeFasterDecoderConfig &decoder_opts,
+    const TransitionModel &trans_model,
+    const nnet3::DecodableNnetSimpleLoopedInfo &info,
+    const FST &fst,
+    OnlineNnet2NoiseFeaturePipeline *features):
+    decoder_opts_(decoder_opts),
+    input_feature_frame_shift_in_seconds_(features->FrameShiftInSeconds()),
+    trans_model_(trans_model),
+    decodable_(trans_model_, info,
+               features->InputFeature(), features->NvectorFeature()),
+    decoder_(fst, decoder_opts_) {
+  decoder_.InitDecoding();
+}
+
+template <typename FST>
 void SingleUtteranceNnet3DecoderTpl<FST>::InitDecoding(int32 frame_offset) {
   decoder_.InitDecoding();
   decodable_.SetFrameOffset(frame_offset);

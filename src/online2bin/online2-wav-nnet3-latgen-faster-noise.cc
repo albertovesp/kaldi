@@ -102,6 +102,7 @@ int main(int argc, char *argv[]) {
     // feature_opts includes configuration for n-vector extraction
     // and silence detection, as well as the basic features.
     OnlineNnet2NoiseFeaturePipelineConfig feature_opts;
+    OnlineFeaturePipelineCommandLineConfig feature_cmdline_config;
     nnet3::NnetSimpleLoopedComputationOptions decodable_opts;
     OnlineGmmDecodingConfig gmm_decode_config;
     LatticeFasterDecoderConfig decoder_opts;
@@ -115,6 +116,7 @@ int main(int argc, char *argv[]) {
                 "Symbol table for words [for debug output]");
 
     feature_opts.Register(&po);
+    feature_cmdline_config.Register(&po);
     decodable_opts.Register(&po);
     gmm_decode_config.Register(&po);
     decoder_opts.Register(&po);
@@ -137,7 +139,7 @@ int main(int argc, char *argv[]) {
     OnlineFeaturePipeline pipeline_prototype(feature_config);
     OnlineNnet2NoiseFeaturePipelineInfo feature_info(feature_opts);
     // The following object initializes the models we use in decoding.
-    OnlineGmmDecodingModels gmm_models(decode_config);
+    OnlineGmmDecodingModels gmm_models(gmm_decode_config);
 
     Matrix<double> global_cmvn_stats;
     if (feature_info.global_cmvn_stats_rxfilename != "")
@@ -208,7 +210,7 @@ int main(int argc, char *argv[]) {
         // take the first channel).
         SubVector<BaseFloat> data(wave_data.Data(), 0);
 
-        SingleUtteranceGmmDecoder gmm_decoder(decode_config,
+        SingleUtteranceGmmDecoder gmm_decoder(gmm_decode_config,
                                           gmm_models,
                                           pipeline_prototype,
                                           *decode_fst,

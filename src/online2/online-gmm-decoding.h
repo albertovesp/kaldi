@@ -280,6 +280,8 @@ class SingleUtteranceGmmDecoder {
   /// with the required arguments.
   bool EndpointDetected(const OnlineEndpointConfig &config);
 
+  const LatticeFasterOnlineDecoder &Decoder() const { return decoder_; }
+
   ~SingleUtteranceGmmDecoder();
  private:
   bool GetGaussianPosteriors(bool end_of_utterance, GaussPost *gpost);

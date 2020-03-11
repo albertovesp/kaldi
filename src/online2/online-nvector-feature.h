@@ -121,7 +121,7 @@ class OnlineNvectorEstimationParams {
   /// training data and estimates the prior parameters.
   void EstimatePriorParameters(const VectorBase<BaseFloat> &mean,
                                const SpMatrix<BaseFloat> &covariance,
-                               const int32 dim);
+                               int32 dim);
 
   void Write(std::ostream &os, bool binary) const;
   void Read(std::istream &is, bool binary);

@@ -71,7 +71,7 @@ void OnlineNvectorEstimationParams::Read(std::istream &is, bool binary) {
 void OnlineNvectorEstimationParams::EstimatePriorParameters(
     const VectorBase<BaseFloat> &mean,
     const SpMatrix<BaseFloat> &covariance,
-    const int32 dim) {
+    int32 dim) {
   SubVector<BaseFloat> mu_n(mean, 0, dim/2);
   SubVector<BaseFloat> mu_s(mean, dim/2, dim/2);
   Matrix<BaseFloat> Lambda(covariance);

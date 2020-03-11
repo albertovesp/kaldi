@@ -33,6 +33,7 @@
 #include "itf/online-feature-itf.h"
 #include "online2/online-endpoint.h"
 #include "online2/online-nnet2-feature-pipeline.h"
+#include "online2/online-nnet2-noise-feature-pipeline.h"
 #include "decoder/lattice-faster-online-decoder.h"
 #include "hmm/transition-model.h"
 #include "hmm/posterior.h"
@@ -60,6 +61,12 @@ class SingleUtteranceNnet3DecoderTpl {
                                  const FST &fst,
                                  OnlineNnet2FeaturePipeline *features);
 
+  SingleUtteranceNnet3DecoderTpl(const LatticeFasterDecoderConfig &decoder_opts,
+                                 const TransitionModel &trans_model,
+                                 const nnet3::DecodableNnetSimpleLoopedInfo &info,
+                                 const FST &fst,
+                                 OnlineNnet2NoiseFeaturePipeline *features);
+  
   /// Initializes the decoding and sets the frame offset of the underlying
   /// decodable object. This method is called by the constructor. You can also
   /// call this method when you want to reset the decoder state, but want to

@@ -24,7 +24,8 @@
 namespace kaldi {
 
 OnlineNnet2NoiseFeaturePipelineInfo::OnlineNnet2NoiseFeaturePipelineInfo(
-    const OnlineNnet2NoiseFeaturePipelineConfig &config) {
+    const OnlineNnet2NoiseFeaturePipelineConfig &config):
+    silence_detection_config(config.silence_detection_config) {
   if (config.feature_type == "mfcc" || config.feature_type == "plp" ||
       config.feature_type == "fbank") {
     feature_type = config.feature_type;
@@ -80,6 +81,8 @@ OnlineNnet2NoiseFeaturePipelineInfo::OnlineNnet2NoiseFeaturePipelineInfo(
     ReadConfigFromFile(config.nvector_extraction_config,
                        &nvector_extraction_opts);
     nvector_extraction_info.Init(nvector_extraction_opts);
+
+
   } else {
     use_nvectors = false;
   }

@@ -24,8 +24,7 @@
 namespace kaldi {
 
 OnlineNnet2NoiseFeaturePipelineInfo::OnlineNnet2NoiseFeaturePipelineInfo(
-    const OnlineNnet2NoiseFeaturePipelineConfig &config):
-    silence_detection_config(config.silence_detection_config) {
+    const OnlineNnet2NoiseFeaturePipelineConfig &config) {
   if (config.feature_type == "mfcc" || config.feature_type == "plp" ||
       config.feature_type == "fbank") {
     feature_type = config.feature_type;
@@ -37,21 +36,7 @@ OnlineNnet2NoiseFeaturePipelineInfo::OnlineNnet2NoiseFeaturePipelineInfo(
   if (config.mfcc_config != "") {
     ReadConfigFromFile(config.mfcc_config, &mfcc_opts);
     if (feature_type != "mfcc")
-      KALDI_WARN << "--mfcc-config option has no effect "
-                 << "since feature type is set to " << feature_type << ".";
-  }  // else use the defaults.
-
-  if (config.plp_config != "") {
-    ReadConfigFromFile(config.plp_config, &plp_opts);
-    if (feature_type != "plp")
-      KALDI_WARN << "--plp-config option has no effect "
-                 << "since feature type is set to " << feature_type << ".";
-  }  // else use the defaults.
-
-  if (config.fbank_config != "") {
-    ReadConfigFromFile(config.fbank_config, &fbank_opts);
-    if (feature_type != "fbank")
-      KALDI_WARN << "--fbank-config option has no effect "
+      KALDI_WARN << "--mfcc-hires-config option has no effect "
                  << "since feature type is set to " << feature_type << ".";
   }  // else use the defaults.
 
@@ -74,7 +59,7 @@ OnlineNnet2NoiseFeaturePipelineInfo::OnlineNnet2NoiseFeaturePipelineInfo(
       KALDI_ERR << "--global-cmvn-stats option is required "
                 << " when --cmvn-config is specified.";
   }
-
+  
   if (config.nvector_extraction_config != "") {
     use_nvectors = true;
     OnlineNvectorExtractionConfig nvector_extraction_opts;

@@ -121,7 +121,8 @@ int main(int argc, char *argv[]) {
         if (num_speech > 0) { speech_feat.Scale(1.0/num_speech); }
         if (num_noise > 0) { noise_feat.Scale(1.0/num_noise); }
         if (concat_speech_vector) {
-          noise_feat.Resize(2*feat.NumCols());
+
+          noise_feat.Resize(2*feat.NumCols(), kCopyData);
           SubVector<BaseFloat> speech_subfeat(noise_feat, feat.NumCols(), feat.NumCols());
           speech_subfeat.CopyFromVec(speech_feat);
         }

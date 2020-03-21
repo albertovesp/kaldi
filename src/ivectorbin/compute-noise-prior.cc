@@ -126,7 +126,6 @@ int main(int argc, char *argv[]) {
 
     SpMatrix<BaseFloat> covariance(dim);
     ComputeCovarianceMatrix(utt2noise_vec, &covariance);
-    
     OnlineNvectorEstimationParams noise_prior;
     noise_prior.EstimatePriorParameters(mean, covariance, dim);
 

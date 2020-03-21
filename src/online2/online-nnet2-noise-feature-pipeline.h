@@ -70,8 +70,6 @@ namespace kaldi {
 struct OnlineNnet2NoiseFeaturePipelineConfig {
   std::string feature_type;  // "plp" or "mfcc" or "fbank"
   std::string mfcc_config;
-  std::string plp_config;
-  std::string fbank_config;
   std::string cmvn_config;
   std::string global_cmvn_stats_rxfilename;
 
@@ -88,11 +86,7 @@ struct OnlineNnet2NoiseFeaturePipelineConfig {
   // noise vector extractor and options related to it, see type
   // OnlineNvectorExtractionConfig.
   std::string nvector_extraction_config;
-
-  // The configuration variables in silence_detection_config relate to the
-  // online silence detection and options related to it, see type
-  // OnlineSilenceDetectionConfig.
-  OnlineSilenceDetectionConfig silence_detection_config;
+  std::string silence_phones_str;
 
   OnlineNnet2NoiseFeaturePipelineConfig():
       feature_type("mfcc"), add_pitch(false) { }
@@ -101,16 +95,15 @@ struct OnlineNnet2NoiseFeaturePipelineConfig {
   void Register(OptionsItf *opts) {
     opts->Register("feature-type", &feature_type,
                    "Base feature type [mfcc, plp, fbank]");
-    opts->Register("mfcc-config", &mfcc_config, "Configuration file for "
+    opts->Register("mfcc-hires-config", &mfcc_config, "Configuration file for "
                    "MFCC features (e.g. conf/mfcc.conf)");
-    opts->Register("plp-config", &plp_config, "Configuration file for "
-                   "PLP features (e.g. conf/plp.conf)");
-    opts->Register("fbank-config", &fbank_config, "Configuration file for "
-                   "filterbank features (e.g. conf/fbank.conf)");
     opts->Register("cmvn-config", &cmvn_config, "Configuration file for "
                    "online cmvn features (e.g. conf/online_cmvn.conf). "
                    "Controls features on nnet3 input (not noise vector features). "
                    "If not set, the OnlineCmvn is disabled.");
+    opts->Register("nvector-extraction-config", &nvector_extraction_config,
+                   "Configuration file for online noise vector extraction, "
+                   "see class OnlineNvectorExtractionConfig in the code");
     opts->Register("global-cmvn-stats", &global_cmvn_stats_rxfilename,
                    "filename with global stats for OnlineCmvn for features "
                    "on nnet3 input (not noise vector features)");
@@ -119,9 +112,9 @@ struct OnlineNnet2NoiseFeaturePipelineConfig {
     opts->Register("online-pitch-config", &online_pitch_config, "Configuration "
                    "file for online pitch features, if --add-pitch=true (e.g. "
                    "conf/online_pitch.conf)");
-    opts->Register("nvector-extraction-config", &nvector_extraction_config,
-                   "Configuration file for online noise vector extraction, "
-                   "see class OnlineNvectorExtractionConfig in the code");
+    opts->Register("silence-phones", &silence_phones_str, "(RE weighting in "
+                   "noise vector estimation for online decoding) List of integer ids of "
+                   "silence phones, separated by colons (or commas).");
   }
 };
 
@@ -167,7 +160,8 @@ struct OnlineNnet2NoiseFeaturePipelineInfo {
   bool use_nvectors;
   OnlineNvectorExtractionInfo nvector_extraction_info;
 
-  OnlineSilenceDetectionConfig silence_detection_config;
+  std::string silence_phones_str;
+  int32 max_state_duration;
 
  private:
   KALDI_DISALLOW_COPY_AND_ASSIGN(OnlineNnet2NoiseFeaturePipelineInfo);

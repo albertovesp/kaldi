@@ -140,7 +140,7 @@ int main(int argc, char *argv[]) {
     OnlineNnet2NoiseFeaturePipelineInfo feature_info(feature_opts);
     // The following object initializes the models we use in decoding.
     OnlineGmmDecodingModels gmm_models(gmm_decode_config);
-
+    
     Matrix<double> global_cmvn_stats;
     if (feature_info.global_cmvn_stats_rxfilename != "")
       ReadKaldiObject(feature_info.global_cmvn_stats_rxfilename,
@@ -195,7 +195,7 @@ int main(int argc, char *argv[]) {
       OnlineNvectorEstimationParams adaptation_state(noise_prior);
       OnlineCmvnState cmvn_state(global_cmvn_stats);
       OnlineSilenceDetection silence_detection(trans_model,
-          feature_info.silence_detection_config);
+          feature_info.silence_phones_str);
 
 
       for (size_t i = 0; i < uttlist.size(); i++) {
@@ -256,14 +256,13 @@ int main(int argc, char *argv[]) {
           }
           
           if (feature_pipeline.NvectorFeature() != NULL) {
-            gmm_decoder.AdvanceDecoding();
             silence_detection.DecodeNextChunk(gmm_decoder.Decoder());
             silence_detection.GetSilenceDecisions(feature_pipeline.NumFramesReady(),
                                               &silence_frames);
             feature_pipeline.NvectorFeature()->UpdateNvector(silence_frames);
             feature_pipeline.NvectorFeature()->UpdateScalingParams(silence_frames);
           }
-
+          gmm_decoder.AdvanceDecoding();
           nnet3_decoder.AdvanceDecoding();
 
         }

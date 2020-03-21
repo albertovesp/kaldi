@@ -102,7 +102,7 @@ OnlineNvectorFeature::OnlineNvectorFeature(
     num_frames_stats_(0) {
   info.Check();
   KALDI_ASSERT(base_feature != NULL);
-
+  current_nvector_ = Vector<BaseFloat>(this->Dim()); 
 }
 
 int32 OnlineNvectorFeature::Dim() const {
@@ -129,7 +129,13 @@ void OnlineNvectorFeature::GetAdaptationState(
 
 void OnlineNvectorFeature::SetAdaptationState(
     const OnlineNvectorEstimationParams &adaptation_state) {
-  this->nvector_stats_ = adaptation_state;
+  this->nvector_stats_.mu_n_ = adaptation_state.mu_n_;
+  this->nvector_stats_.a_ = adaptation_state.a_;
+  this->nvector_stats_.B_ = adaptation_state.B_;
+  this->nvector_stats_.Lambda_n_ = adaptation_state.Lambda_n_;
+  this->nvector_stats_.Lambda_s_ = adaptation_state.Lambda_s_;
+  this->nvector_stats_.r_s_ = adaptation_state.r_s_;
+  this->nvector_stats_.r_n_ = adaptation_state.r_n_;
 }
 
 void OnlineNvectorFeature::UpdateNvector(
@@ -139,10 +145,10 @@ void OnlineNvectorFeature::UpdateNvector(
   // in silence_frames. We need, for both speech and noise
   // frames, the number of frames, sum of all frames, and
   // the variance of all frames.
-  int32 num_speech = 0, num_noise = 0, dim = this->Dim();
+  int32 num_speech = 0, num_noise = 0, dim = this->Dim()/2;
   Vector<BaseFloat> speech_sum(dim), noise_sum(dim);
   Matrix<BaseFloat> speech_var(dim, dim), noise_var(dim, dim);
-  Vector<BaseFloat> cur_frame;
+  Vector<BaseFloat> cur_frame(dim);
   // Check that we have the frames we need to perform the computations
   KALDI_ASSERT(NumFramesReady() >= silence_frames.back().first);
 
@@ -213,22 +219,24 @@ void OnlineNvectorFeature::GetFrame(int32 frame,
 
 void OnlineNvectorFeature::UpdateScalingParams(
     const std::vector<std::pair<int32, bool> > &silence_frames) {
-  int32 num_speech = 0, num_noise = 0, dim = this->Dim();
+  int32 num_speech = 0, num_noise = 0, dim = this->Dim()/2;
   Matrix<BaseFloat> speech_var(dim, dim), noise_var(dim, dim);
   
-  Vector<BaseFloat> cur_frame;
+  Vector<BaseFloat> cur_frame(dim);
   std::vector<std::pair<int32, bool> >::const_iterator it;
+  SubVector<BaseFloat> noise_vec(current_nvector_, 0, dim);
+  SubVector<BaseFloat> speech_vec(current_nvector_, dim, dim);
   for (it = silence_frames.begin(); it != silence_frames.end(); it++) {
     base_->GetFrame(it->first, &cur_frame);
     if (it->second == true) {
       // This is a noise frame
       num_noise++;
-      cur_frame.AddVec(-1.0, current_nvector_);
+      cur_frame.AddVec(-1.0, noise_vec);
       noise_var.AddVecVec(1.0, cur_frame, cur_frame);  
     } else {
       // This is a speech frame
       num_speech++;
-      cur_frame.AddVec(-1.0, current_nvector_);
+      cur_frame.AddVec(-1.0, speech_vec);
       speech_var.AddVecVec(1.0, cur_frame, cur_frame);
     }
   }
@@ -250,14 +258,15 @@ OnlineNvectorFeature::~OnlineNvectorFeature() {
 
 OnlineSilenceDetection::OnlineSilenceDetection(
     const TransitionModel &trans_model,
-    const OnlineSilenceDetectionConfig &config,
+    const std::string silence_phones_str,
+    const int32 max_state_duration,
     int32 frame_subsampling_factor):
-    trans_model_(trans_model), config_(config),
+    trans_model_(trans_model),
     frame_subsampling_factor_(frame_subsampling_factor),
-    max_state_duration_(config.max_state_duration) {
+    max_state_duration_(max_state_duration) {
   KALDI_ASSERT(frame_subsampling_factor_ >= 1);
   std::vector<int32> silence_phones;
-  SplitStringToIntegers(config.silence_phones_str, ":,", false,
+  SplitStringToIntegers(silence_phones_str, ":,", false,
                         &silence_phones);
   for (size_t i = 0; i < silence_phones.size(); i++)
     silence_phones_.insert(silence_phones[i]);
@@ -269,11 +278,12 @@ void OnlineSilenceDetection::DecodeNextChunk(
     const LatticeFasterOnlineDecoderTpl<FST> &decoder) {
   int32 num_frames_decoded = decoder.NumFramesDecoded(),
       num_frames_prev = frame_info_.size();
-  // Since we do not recompute silence decisions for previously
-  // decoded frames, the num_frames_decoded must be equal to
-  // num_frames_prev
-  KALDI_ASSERT(num_frames_decoded == num_frames_prev);
-
+  if (num_frames_prev < num_frames_decoded)
+    frame_info_.resize(num_frames_decoded);
+  if (num_frames_prev > num_frames_decoded &&
+      frame_info_[num_frames_decoded].transition_id != -1)
+    KALDI_ERR << "Number of frames decoded decreased";  // Likely bug
+  
   if (num_frames_decoded == 0)
     return;
   int32 frame = num_frames_decoded - 1;

@@ -108,8 +108,8 @@ class OnlineNvectorEstimationParams {
     B_(other.B_),
     Lambda_n_(other.Lambda_n_),
     Lambda_s_(other.Lambda_s_),
-    r_s_(other.r_s_),
-    r_n_(other.r_n_) {
+    r_s_(1),
+    r_n_(1) {
   };
 
   // Assignment operator used for GetAdaptationState() and SetAdaptationState() methods
@@ -252,29 +252,6 @@ class OnlineNvectorFeature: public OnlineFeatureInterface {
 };
 
 
-struct OnlineSilenceDetectionConfig {
-  std::string silence_phones_str;
-  int32 max_state_duration;
-
-  bool Active() const {
-    return !silence_phones_str.empty();
-  }
-
-  OnlineSilenceDetectionConfig(): max_state_duration(-1) { }
-
-  void Register(OptionsItf *opts) {
-    opts->Register("silence-phones", &silence_phones_str, "(RE weighting in "
-                   "noise vector estimation for online decoding) List of integer ids of "
-                   "silence phones, separated by colons (or commas).");
-  }
-  // e.g. prefix = "ivector-silence-weighting"
-  void RegisterWithPrefix(std::string prefix, OptionsItf *opts) {
-    ParseOptions po_prefix(prefix, opts);
-    this->Register(&po_prefix);
-  }
-};
-
-
 // This class is responsible for performing speech/silence frame classification
 // which is used for computing means for the online estimation of noise
 // vectors. 
@@ -288,10 +265,9 @@ class OnlineSilenceDetection {
   // models.
 
   OnlineSilenceDetection(const TransitionModel &trans_model,
-                         const OnlineSilenceDetectionConfig &config,
+                         const std::string silence_phones_str,
+                         const int32 max_state_duration = 1000,
                          int32 frame_subsampling_factor = 1);
-
-  bool Active() const { return config_.Active(); }
 
   // This should be called before GetSilenceDecisions, so this class knows about the
   // traceback info from the decoder.  It records the traceback information from
@@ -337,7 +313,6 @@ class OnlineSilenceDetection {
 
  private:
   const TransitionModel &trans_model_;
-  const OnlineSilenceDetectionConfig &config_;
 
   int32 frame_subsampling_factor_;
 

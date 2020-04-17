@@ -96,6 +96,7 @@ int main(int argc, char *argv[]) {
         "you want to decode utterance by utterance.\n";
 
     ParseOptions po(usage);
+    ParseOptions po_gmm("gmm", &po);
 
     std::string word_syms_rxfilename;
 
@@ -116,9 +117,9 @@ int main(int argc, char *argv[]) {
                 "Symbol table for words [for debug output]");
 
     feature_opts.Register(&po);
-    feature_cmdline_config.Register(&po);
+    feature_cmdline_config.Register(&po_gmm);
     decodable_opts.Register(&po);
-    gmm_decode_config.Register(&po);
+    gmm_decode_config.Register(&po_gmm);
     decoder_opts.Register(&po);
 
     po.Read(argc, argv);
@@ -127,7 +128,7 @@ int main(int argc, char *argv[]) {
       po.PrintUsage();
       return 1;
     }
-
+    
     std::string nnet3_rxfilename = po.GetArg(1),
         fst_rxfilename = po.GetArg(2),
         noise_prior_rxfilename = po.GetArg(3),
@@ -234,7 +235,7 @@ int main(int argc, char *argv[]) {
           chunk_length = std::numeric_limits<int32>::max();
         }
 
-        int32 samp_offset = 0;
+        int32 samp_offset = 0, first_decoder_frame = 0;
         std::vector<std::pair<int32, bool> > silence_frames;
 
         while (samp_offset < data.Dim()) {
@@ -244,8 +245,9 @@ int main(int argc, char *argv[]) {
 
           SubVector<BaseFloat> wave_part(data, samp_offset, num_samp);
           gmm_decoder.FeaturePipeline().AcceptWaveform(samp_freq, wave_part);
-          
+          std::cout << "GMM feats = " << gmm_decoder.FeaturePipeline().NumFramesReady() << std::endl;
           feature_pipeline.AcceptWaveform(samp_freq, wave_part);
+          std::cout << "Nnet feats = " << feature_pipeline.NumFramesReady() << std::endl;
 
           samp_offset += num_samp;
           decoding_timer.WaitUntil(samp_offset / samp_freq);
@@ -256,13 +258,18 @@ int main(int argc, char *argv[]) {
           }
           
           if (feature_pipeline.NvectorFeature() != NULL) {
-            silence_detection.DecodeNextChunk(gmm_decoder.Decoder());
-            silence_detection.GetSilenceDecisions(feature_pipeline.NumFramesReady(),
-                                              &silence_frames);
+            gmm_decoder.AdvanceDecoding();
+            silence_detection.GetSilenceDecisions(gmm_decoder.Decoder(), first_decoder_frame, 
+                &silence_frames);
+            first_decoder_frame = gmm_decoder.FeaturePipeline().NumFramesReady();
+            //for (const auto& p : silence_frames)
+            //{
+            //    std::cout << p.first << ", " << p.second << std::endl;
+            //}
+            std::cout<<"num sil decisions = " << silence_frames.size()<<std::endl;
             feature_pipeline.NvectorFeature()->UpdateNvector(silence_frames);
             feature_pipeline.NvectorFeature()->UpdateScalingParams(silence_frames);
           }
-          gmm_decoder.AdvanceDecoding();
           nnet3_decoder.AdvanceDecoding();
 
         }

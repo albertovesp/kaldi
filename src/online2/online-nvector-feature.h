@@ -269,13 +269,6 @@ class OnlineSilenceDetection {
                          const int32 max_state_duration = 1000,
                          int32 frame_subsampling_factor = 1);
 
-  // This should be called before GetSilenceDecisions, so this class knows about the
-  // traceback info from the decoder.  It records the traceback information from
-  // the decoder using its BestPathEnd() and related functions.
-  // It will be instantiated for FST == fst::Fst<fst::StdArc> and fst::GrammarFst.
-  template <typename FST>
-  void DecodeNextChunk(const LatticeFasterOnlineDecoderTpl<FST> &decoder);
-
   // This function outputs speech/silence decision for every frame in the utterance
   // and the output format is (frame-index, true/false), where true/false refers to
   // silence/speech frames respectively.
@@ -300,16 +293,8 @@ class OnlineSilenceDetection {
   //
   // Returned frame-index is in pipeline frames from the pipeline start.
   void GetSilenceDecisions(
-      int32 num_frames_ready, int32 first_decoder_frame,
-      std::vector<std::pair<int32, bool> > *silence_frames);
-
-  // A method for backward compatibility, same as above, but for a single
-  // utterance.
-  void GetSilenceDecisions(
-      int32 num_frames_ready,
-      std::vector<std::pair<int32, bool> > *silence_frames) {
-    GetSilenceDecisions(num_frames_ready, 0, silence_frames);
-  }
+      const LatticeFasterOnlineDecoder &decoder,
+      int32 first_decoder_frame, std::vector<std::pair<int32, bool> > *silence_frames);
 
  private:
   const TransitionModel &trans_model_;

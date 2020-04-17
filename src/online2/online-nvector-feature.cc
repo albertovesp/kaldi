@@ -149,8 +149,6 @@ void OnlineNvectorFeature::UpdateNvector(
   Vector<BaseFloat> speech_sum(dim), noise_sum(dim);
   Matrix<BaseFloat> speech_var(dim, dim), noise_var(dim, dim);
   Vector<BaseFloat> cur_frame(dim);
-  // Check that we have the frames we need to perform the computations
-  KALDI_ASSERT(NumFramesReady() >= silence_frames.back().first);
 
   std::vector<std::pair<int32, bool> >::const_iterator it;
   for (it = silence_frames.begin(); it != silence_frames.end(); it++) {
@@ -206,6 +204,10 @@ void OnlineNvectorFeature::UpdateNvector(
   K.Invert();
   current_nvector_.AddMatVec(1.0, K, kNoTrans, Q, 0.0);
   nvectors_history_.push_back(new Vector<BaseFloat>(current_nvector_));
+  for (int32 i = 0; i < current_nvector_.Dim(); i++) {
+    std::cout << current_nvector_(i) << ' ';
+  }
+  std::cout << std::endl;
 }
 
 void OnlineNvectorFeature::GetFrame(int32 frame,
@@ -240,11 +242,16 @@ void OnlineNvectorFeature::UpdateScalingParams(
       speech_var.AddVecVec(1.0, cur_frame, cur_frame);
     }
   }
-
-  nvector_stats_.r_s_ = (dim * num_speech) / 
-    TraceMatMat(nvector_stats_.Lambda_s_, speech_var);
+  
+  if (num_speech > 0) { 
+    nvector_stats_.r_s_ = (dim * num_speech) / 
+      TraceMatMat(nvector_stats_.Lambda_s_, speech_var);
+  }
+  if (num_noise > 0) {
   nvector_stats_.r_n_ = (dim * num_noise) / 
     TraceMatMat(nvector_stats_.Lambda_n_, noise_var);
+  }
+  std::cout<<"r_s_=" << nvector_stats_.r_s_ << " r_n_=" << nvector_stats_.r_n_ << std::endl;
 }
 
 OnlineNvectorFeature::~OnlineNvectorFeature() {
@@ -268,14 +275,15 @@ OnlineSilenceDetection::OnlineSilenceDetection(
   std::vector<int32> silence_phones;
   SplitStringToIntegers(silence_phones_str, ":,", false,
                         &silence_phones);
-  for (size_t i = 0; i < silence_phones.size(); i++)
+  for (size_t i = 0; i < silence_phones.size(); i++) {
     silence_phones_.insert(silence_phones[i]);
+  }
 }
 
-
-template <typename FST>
-void OnlineSilenceDetection::DecodeNextChunk(
-    const LatticeFasterOnlineDecoderTpl<FST> &decoder) {
+void OnlineSilenceDetection::GetSilenceDecisions(
+    const LatticeFasterOnlineDecoder &decoder,
+    int32 first_decoder_frame, std::vector<std::pair<int32, bool> > *silence_frames) {
+  
   int32 num_frames_decoded = decoder.NumFramesDecoded(),
       num_frames_prev = frame_info_.size();
   if (num_frames_prev < num_frames_decoded)
@@ -288,9 +296,9 @@ void OnlineSilenceDetection::DecodeNextChunk(
     return;
   int32 frame = num_frames_decoded - 1;
   bool use_final_probs = false;
-  typename LatticeFasterOnlineDecoderTpl<FST>::BestPathIterator iter =
+  typename LatticeFasterOnlineDecoder::BestPathIterator iter =
       decoder.BestPathEnd(use_final_probs, NULL);
-  while (frame >= 0) {
+  while (frame >= first_decoder_frame) {
     LatticeArc arc;
     arc.ilabel = 0;
     while (arc.ilabel == 0)  // the while loop skips over input-epsilons
@@ -311,43 +319,12 @@ void OnlineSilenceDetection::DecodeNextChunk(
     frame_info_[frame].token = iter.tok;
     frame_info_[frame].transition_id = arc.ilabel;
     frame--;
-    // leave frame_info_.current_weight at zero for now (as set in the
-    // constructor), reflecting that we haven't already output a weight for that
-    // frame.
   }
-}
-
-// Instantiate the template OnlineSilenceDetection::DecodeNextChunk().
-template
-void OnlineSilenceDetection::DecodeNextChunk<fst::Fst<fst::StdArc> >(
-    const LatticeFasterOnlineDecoderTpl<fst::Fst<fst::StdArc> > &decoder);
-template
-void OnlineSilenceDetection::DecodeNextChunk<fst::GrammarFst>(
-    const LatticeFasterOnlineDecoderTpl<fst::GrammarFst> &decoder);
-
-void OnlineSilenceDetection::GetSilenceDecisions(
-    int32 num_frames_ready, int32 first_decoder_frame,
-    std::vector<std::pair<int32, bool> > *silence_frames) {
-  // num_frames_ready is at the feature frame-rate, most of the code
-  // in this function is at the decoder frame-rate.
-  // round up, so we are sure to get weights for at least the frame
-  // 'num_frames_ready - 1', and maybe one or two frames afterward.
-  KALDI_ASSERT(num_frames_ready > first_decoder_frame || num_frames_ready == 0);
-  int32 fs = frame_subsampling_factor_,
-  num_decoder_frames_ready = (num_frames_ready - first_decoder_frame + fs - 1) / fs;
 
   silence_frames->clear();
 
-  int32 prev_num_frames_processed = frame_info_.size();
-  if (frame_info_.size() < static_cast<size_t>(num_decoder_frames_ready))
-    frame_info_.resize(num_decoder_frames_ready);
-
-  // We start from the last computed frame. This is different from the online
-  // silence weighting done for ivectors, where we go 100 frames in history
-  // to recompute silence decisions. This is because we are using a Bayesian
-  // model for n-vector estimation.
-  int32 begin_frame = prev_num_frames_processed,
-      frames_out = static_cast<int32>(frame_info_.size()) - begin_frame;
+  int32 begin_frame = num_frames_prev,
+      frames_out = num_frames_decoded - num_frames_prev;
   // frames_out is the number of frames we will output.
   KALDI_ASSERT(frames_out >= 0);
   std::vector<bool> frame_decisions(frames_out, false);
@@ -376,6 +353,7 @@ void OnlineSilenceDetection::GetSilenceDecisions(
       } else {
         int32 phone = trans_model_.TransitionIdToPhone(transition_id);
         bool is_silence = (silence_phones_.count(phone) != 0);
+        std::cout<<"frame:"<<begin_frame+offset<< " transition id:" << transition_id << " phone:"<<phone<<" is sil:"<<is_silence<<std::endl;
         if (is_silence)
           frame_decisions[offset] = true;
         // now deal with max-duration issues.
@@ -401,12 +379,9 @@ void OnlineSilenceDetection::GetSilenceDecisions(
   for (int32 offset = 0; offset < frames_out; offset++) {
     int32 frame = begin_frame + offset;
     frame_info_[frame].silence_decision = frame_decisions[offset];
-    // Even if the delta-weight is zero for the last frame, we provide it,
-    // because the identity of the most recent frame with a weight is used in
-    // some debugging/checking code.
     for(int32 i = 0; i < frame_subsampling_factor_; i++) {
-      int32 input_frame = first_decoder_frame + (frame * frame_subsampling_factor_) + i;
-      silence_frames->push_back(std::make_pair(input_frame, frame_decisions[i]));
+      int32 input_frame = first_decoder_frame + (offset * frame_subsampling_factor_) + i;
+      silence_frames->push_back(std::make_pair(input_frame, frame_decisions[frame]));
     }
   }
 }

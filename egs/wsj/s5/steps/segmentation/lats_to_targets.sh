@@ -132,6 +132,6 @@ for n in $(seq $nj); do
   cat $dir/targets.$n.scp
 done > $dir/targets.scp
 
-steps/segmentation/validate_targets_dir.sh $dir $data || exit 1
+#steps/segmentation/validate_targets_dir.sh $dir $data || exit 1
 
 echo "$0: Done creating targets in $dir/targets.scp"

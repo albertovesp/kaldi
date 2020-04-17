@@ -71,6 +71,8 @@ OnlineNnet2NoiseFeaturePipelineInfo::OnlineNnet2NoiseFeaturePipelineInfo(
   } else {
     use_nvectors = false;
   }
+
+  silence_phones_str = config.silence_phones_str; 
 }
 
 

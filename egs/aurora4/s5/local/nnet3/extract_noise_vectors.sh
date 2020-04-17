@@ -39,8 +39,9 @@ if [ $stage -le 10 ] && [ ! ${segment_dir}/silence_phones.txt ]; then
 fi
 
 lat_dir=${segment_dir}/${train_set}_lats
-targets_dir=${segment_dir}/${train_set}_targets_sub3
-  
+targets_dir=${segment_dir}/${train_set}_targets_sub3_whole
+mkdir -p $targets_dir
+
 if [ $stage -le 9 ]; then
   # Segmentation for train data
   steps/align_fmllr_lats.sh --nj $nj \
@@ -74,7 +75,9 @@ if [ $stage -le 11 ]; then
     select-feats "$start_dim-$end_dim" ark:- ark:- \| \
     subsample-feats --n=10 ark:- ark:- \| \
     copy-feats --compress=true ark:- \
-    ark,scp:$targets_dir/noise_vec_online.ark,$targets_dir/noise_vec_online.scp || exit 1;
+    ark,scp:$targets_dir/ivector_online.ark,$targets_dir/ivector_online.scp || exit 1;
+
+  echo 10 > $targets_dir/ivector_period
 fi
 
 if [ $stage -le 12 ]; then
@@ -100,6 +103,7 @@ if [ $stage -le 13 ]; then
   # Compute speech and noise vectors for test data
   for test_dir in $test_sets; do
     targets_dir=${segment_dir}/${test_dir}_targets_sub3
+    mkdir -p $targets_dir
     compute-noise-vector --concat-speech-vector=$concat_speech_vector scp:data/${test_dir}_hires/feats.scp \
       scp:$targets_dir/targets.scp ark,scp:$targets_dir/noise_vec.ark,$targets_dir/noise_vec.scp
   done
@@ -122,7 +126,9 @@ if [ $stage -le 14 ]; then
       select-feats "$start_dim-$end_dim" ark:- ark:- \| \
       subsample-feats --n=10 ark:- ark:- \| \
       copy-feats --compress=true ark:- \
-      ark,scp:$targets_dir/noise_vec_online.ark,$targets_dir/noise_vec_online.scp || exit 1;
+      ark,scp:$targets_dir/ivector_online.ark,$targets_dir/ivector_online.scp || exit 1;
+
+    echo 10 > $targets_dir/ivector_period
   done
 fi
 

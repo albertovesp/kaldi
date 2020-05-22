@@ -13,7 +13,6 @@ train_set=train_si84   # you might set this to e.g. train.
 test_sets=
 gmm=tri3b                # This specifies a GMM-dir from the features of the type you're training the system on;
 affix= 
-concat_speech_vector=true
 
 . utils/parse_options.sh
 
@@ -39,7 +38,7 @@ if [ $stage -le 10 ] && [ ! ${segment_dir}/silence_phones.txt ]; then
 fi
 
 lat_dir=${segment_dir}/${train_set}_lats
-targets_dir=${segment_dir}/${train_set}_targets_sub3_whole
+targets_dir=${segment_dir}/${train_set}_targets
 mkdir -p $targets_dir
 
 if [ $stage -le 9 ]; then
@@ -56,35 +55,32 @@ fi
 
 if [ $stage -le 10 ]; then
   # Compute speech and noise vectors for training data
-  compute-noise-vector --concat-speech-vector=${concat_speech_vector} scp:data/${train_set}_sp_hires/feats.scp \
-    scp:$targets_dir/targets.scp ark,scp:$targets_dir/noise_vec.ark,$targets_dir/noise_vec.scp
+  noise_vec_dir=exp/nnet3/noise_${train_set}_sp_hires
+  compute-noise-vector scp:data/${train_set}_sp_hires/feats.scp scp:$targets_dir/targets.scp \
+    ark,scp:$noise_vec_dir/noise_vec.ark,$noise_vec_dir/noise_vec.scp
 fi
 
 if [ $stage -le 11 ]; then
   base_feat_dim=$(feat-to-dim scp:data/${train_set}_sp_hires/feats.scp -) || exit 1;
   start_dim=$base_feat_dim
-  if [ $concat_speech_vector ]; then
-    noise_dim=$((2*base_feat_dim))
-  else
-    noise_dim=$base_feat_dim
-  fi
+  noise_dim=$((2*base_feat_dim))
   end_dim=$[$base_feat_dim+$noise_dim-1]
 
   $train_cmd $targets_dir/log/duplicate_feats.log \
-    append-vector-to-feats scp:data/${train_set}_sp_hires/feats.scp ark:$targets_dir/noise_vec.ark ark:- \| \
+    append-vector-to-feats scp:data/${train_set}_sp_hires/feats.scp ark:$noise_vec_dir/noise_vec.ark ark:- \| \
     select-feats "$start_dim-$end_dim" ark:- ark:- \| \
     subsample-feats --n=10 ark:- ark:- \| \
     copy-feats --compress=true ark:- \
-    ark,scp:$targets_dir/ivector_online.ark,$targets_dir/ivector_online.scp || exit 1;
+    ark,scp:$noise_vec_dir/ivector_online.ark,$noise_vec_dir/ivector_online.scp || exit 1;
 
-  echo 10 > $targets_dir/ivector_period
+  echo 10 > $noise_vec_dir/ivector_period
 fi
 
 if [ $stage -le 12 ]; then
   # Segmentation for test data
   for test_dir in ${test_sets}; do
     lang_dir=data/lang_test_tgpr
-    targets_dir=${segment_dir}/${test_dir}_targets_sub3
+    targets_dir=${segment_dir}/${test_dir}_targets
     nspk=$(wc -l <data/${test_dir}/spk2utt)
 
     utils/mkgraph.sh data/lang_test_tgpr \
@@ -102,33 +98,32 @@ fi
 if [ $stage -le 13 ]; then
   # Compute speech and noise vectors for test data
   for test_dir in $test_sets; do
-    targets_dir=${segment_dir}/${test_dir}_targets_sub3
-    mkdir -p $targets_dir
-    compute-noise-vector --concat-speech-vector=$concat_speech_vector scp:data/${test_dir}_hires/feats.scp \
-      scp:$targets_dir/targets.scp ark,scp:$targets_dir/noise_vec.ark,$targets_dir/noise_vec.scp
+    targets_dir=${segment_dir}/${test_dir}_targets
+    noise_vec_dir=exp/nnet3/noise_${test_dir}_hires
+    mkdir -p $noise_vec_dir
+    compute-noise-vector scp:data/${test_dir}_hires/feats.scp scp:$targets_dir/targets.scp \
+      ark,scp:$noise_vec_dir/noise_vec.ark,$noise_vec_dir/noise_vec.scp
   done
 fi
 
 if [ $stage -le 14 ]; then
   for test_dir in ${test_sets}; do
+    targets_dir=${segment_dir}/${test_dir}_targets
+    noise_vec_dir=exp/nnet3/noise_${test_dir}_hires
     base_feat_dim=$(feat-to-dim scp:data/${test_dir}_hires/feats.scp -) || exit 1;
     start_dim=$base_feat_dim
-    if [ $concat_speech_vector ]; then
-      noise_dim=$((2*base_feat_dim))
-    else
-      noise_dim=$base_feat_dim
-    fi
+    noise_dim=$((2*base_feat_dim))
     end_dim=$[$base_feat_dim+$noise_dim-1]
 
-    targets_dir=${segment_dir}/${test_dir}_targets_sub3
+    targets_dir=${segment_dir}/${test_dir}_targets
     $train_cmd $targets_dir/log/duplicate_feats.log \
-      append-vector-to-feats scp:data/${test_dir}_hires/feats.scp ark:$targets_dir/noise_vec.ark ark:- \| \
+      append-vector-to-feats scp:data/${test_dir}_hires/feats.scp ark:$noise_vec_dir/noise_vec.ark ark:- \| \
       select-feats "$start_dim-$end_dim" ark:- ark:- \| \
       subsample-feats --n=10 ark:- ark:- \| \
       copy-feats --compress=true ark:- \
-      ark,scp:$targets_dir/ivector_online.ark,$targets_dir/ivector_online.scp || exit 1;
+      ark,scp:$noise_vec_dir/ivector_online.ark,$noise_vec_dir/ivector_online.scp || exit 1;
 
-    echo 10 > $targets_dir/ivector_period
+    echo 10 > $noise_vec_dir/ivector_period
   done
 fi
 

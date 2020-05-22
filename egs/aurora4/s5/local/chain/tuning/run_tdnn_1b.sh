@@ -33,8 +33,8 @@ nnet3_affix=       # affix for exp dirs, e.g. it was _cleaned in tedlium.
 segmentation_affix=
 
 # Options which are not passed through to run_ivector_common.sh
-affix=1b   #affix for TDNN directory e.g. "1a" or "1b", in case we change the configuration.
-common_egs_dir=exp/chain/tdnn1b_sp/egs
+affix=1b #affix for TDNN directory e.g. "1a" or "1b", in case we change the configuration.
+common_egs_dir=
 reporting_email=
 
 # LSTM/chain options
@@ -50,14 +50,13 @@ chunk_right_context=0
 
 # training options
 srand=0
-remove_egs=false
+remove_egs=true
 
 #decode options
 test_online_decoding=false  # if true, it will run the last decoding stage.
 
 # End configuration section.
 echo "$0 $@"  # Print the command line for logging
-
 
 . ./cmd.sh
 . ./path.sh
@@ -76,18 +75,18 @@ fi
 local/nnet3/run_ivector_common.sh \
   --stage $stage --nj $nj \
   --train-set $train_set --gmm $gmm \
-  --test-sets $test_sets \
+  --test-sets "$test_sets" \
   --num-threads-ubm $num_threads_ubm \
   --nj-extractor $nj_extractor \
   --num-processes-extractor $num_processes_extractor \
   --num-threads-extractor $num_threads_extractor \
   --nnet3-affix "$nnet3_affix"
 
-# The following script handles stages 9 to 16
+# The following script handles stages 9 to 14
 local/nnet3/extract_noise_vectors.sh \
   --stage $stage --nj $nj \
   --train-set $train_set --gmm $gmm \
-  --test-sets $test_sets \
+  --test-sets "$test_sets" \
   --affix "$segmentation_affix"
 
 gmm_dir=exp/${gmm}
@@ -97,33 +96,26 @@ dir=exp/chain${nnet3_affix}/tdnn${affix}_sp
 train_data_dir=data/${train_set}_sp_hires
 train_ivector_dir=exp/nnet3${nnet3_affix}/ivectors_${train_set}_sp_hires
 lores_train_data_dir=data/${train_set}_sp
+segment_dir=exp/chain/segmentation${segmentation_affix}
 
 # Concat ivectors with noise vectors for training set
-if [ $stage -le 17 ]; then
-  segment_dir=exp/chain/segmentation${segmentation_affix}
-  cut -d' ' -f1 ${segment_dir}/${train_set}_targets_sub3/targets.scp | \
-    utils/filter_scp.pl - ${train_ivector_dir}/ivector_online.scp > ${train_ivector_dir}/ivector_online_new.scp
-  mv ${train_ivector_dir}/ivector_online.scp ${train_ivector_dir}/ivector_online_old.scp
-  mv ${train_ivector_dir}/ivector_online_new.scp ${train_ivector_dir}/ivector_online.scp
-
+if [ $stage -le 15 ]; then
+  noise_vec_dir=exp/nnet3${nnet3_affix}/noise_${train_set}_sp_hires
   mkdir -p ${train_ivector_dir}_noise
-  paste-feats scp:${train_ivector_dir}/ivector_online.scp scp:${segment_dir}/${train_set}_targets_sub3/noise_vec_online.scp \
+  paste-feats scp:${train_ivector_dir}/ivector_online.scp scp:${noise_vec_dir}/ivector_online.scp \
     ark,scp:${train_ivector_dir}_noise/ivector_online.ark,${train_ivector_dir}_noise/ivector_online.scp
+  echo 10 > ${train_ivector_dir}_noise/ivector_period
 fi
 
 # Concat ivectors with noise vectors for test set
-if [ $stage -le 18 ]; then
+if [ $stage -le 16 ]; then
   for test_dir in ${test_sets}; do
-    segment_dir=exp/chain/segmentation${segmentation_affix}
+    noise_vec_dir=exp/nnet3${nnet3_affix}/noise_${test_dir}_hires
     ivector_dir=exp/nnet3${nnet3_affix}/ivectors_${test_dir}_hires
-    cut -d' ' -f1 ${segment_dir}/${test_dir}_targets_sub3/targets.scp | \
-      utils/filter_scp.pl - ${ivector_dir}/ivector_online.scp > ${ivector_dir}/ivector_online_new.scp
-    mv ${ivector_dir}/ivector_online.scp ${ivector_dir}/ivector_online_old.scp
-    mv ${ivector_dir}/ivector_online_new.scp ${ivector_dir}/ivector_online.scp
-
     mkdir -p ${ivector_dir}_noise
-    paste-feats scp:${ivector_dir}/ivector_online.scp scp:${segment_dir}/${test_dir}_targets_sub3/noise_vec_online.scp \
+    paste-feats scp:${ivector_dir}/ivector_online.scp scp:${noise_vec_dir}/ivector_online.scp \
       ark,scp:${ivector_dir}_noise/ivector_online.ark,${ivector_dir}_noise/ivector_online.scp
+    echo 10 > ${ivector_dir}_noise/ivector_period
   done
 fi
 
@@ -136,14 +128,13 @@ tree_dir=exp/chain${nnet3_affix}/tree_a_sp
 # you should probably name it differently.
 lang=data/lang_chain
 
-for f in $train_data_dir/feats.scp $train_ivector_dir/ivector_online.scp \
+for f in $train_data_dir/feats.scp ${train_ivector_dir}_noise/ivector_online.scp \
     $lores_train_data_dir/feats.scp $gmm_dir/final.mdl \
     $ali_dir/ali.1.gz $gmm_dir/final.mdl; do
   [ ! -f $f ] && echo "$0: expected file $f to exist" && exit 1
 done
 
-
-if [ $stage -le 19 ]; then
+if [ $stage -le 17 ]; then
   echo "$0: creating lang directory $lang with chain-type topology"
   # Create a version of the lang/ directory that has one state per phone in the
   # topo file. [note, it really has two states.. the first one is only repeated
@@ -166,7 +157,7 @@ if [ $stage -le 19 ]; then
   fi
 fi
 
-if [ $stage -le 20 ]; then
+if [ $stage -le 18 ]; then
   # Get the alignments as lattices (gives the chain training more freedom).
   # use the same num-jobs as the alignments
   steps/align_fmllr_lats.sh --nj 100 --cmd "$train_cmd" ${lores_train_data_dir} \
@@ -174,7 +165,7 @@ if [ $stage -le 20 ]; then
   rm $lat_dir/fsts.*.gz # save space
 fi
 
-if [ $stage -le 21 ]; then
+if [ $stage -le 19 ]; then
   # Build a tree using our new topology.  We know we have alignments for the
   # speed-perturbed data (local/nnet3/run_ivector_common.sh made them), so use
   # those.  The num-leaves is always somewhat less than the num-leaves from
@@ -190,7 +181,7 @@ if [ $stage -le 21 ]; then
     $lang $ali_dir $tree_dir
 fi
 
-if [ $stage -le 22 ]; then
+if [ $stage -le 20 ]; then
   mkdir -p $dir
   echo "$0: creating neural net configs using the xconfig parser";
 
@@ -207,12 +198,10 @@ if [ $stage -le 22 ]; then
   input dim=180 name=ivector
   input dim=40 name=input
 
-  idct-layer name=idct input=input dim=40 cepstral-lifter=22 affine-transform-file=$dir/configs/idct.mat
-  delta-layer name=delta input=idct
-  no-op-component name=input2 input=Append(delta, Scale(1.0, ReplaceIndex(ivector, t, 0)))
+  fixed-affine-layer name=lda input=Append(-1,0,1,ReplaceIndex(ivector, t, 0)) affine-transform-file=$dir/configs/lda.mat
 
   # the first splicing is moved before the lda layer, so no splicing here
-  relu-batchnorm-layer name=tdnn1 $tdnn_opts dim=1024 input=input2
+  relu-batchnorm-layer name=tdnn1 $tdnn_opts dim=1024 input=lda
   tdnnf-layer name=tdnnf2 $tdnnf_opts dim=1024 bottleneck-dim=128 time-stride=1
   tdnnf-layer name=tdnnf3 $tdnnf_opts dim=1024 bottleneck-dim=128 time-stride=1
   tdnnf-layer name=tdnnf4 $tdnnf_opts dim=1024 bottleneck-dim=128 time-stride=1
@@ -237,7 +226,8 @@ EOF
   steps/nnet3/xconfig_to_configs.py --xconfig-file $dir/configs/network.xconfig --config-dir $dir/configs/
 fi
 
-if [ $stage -le 23 ]; then
+if [ $stage -le 21 ]; then
+  segment_dir=exp/chain/segmentation${segmentation_affix}
   if [[ $(hostname -f) == *.clsp.jhu.edu ]] && [ ! -d $dir/egs/storage ]; then
     utils/create_split_dir.pl \
      /export/b0{3,4,5,6}/$USER/kaldi-data/egs/aurora4-$(date +'%m_%d_%H_%M')/s5/$dir/egs/storage $dir/egs/storage
@@ -270,7 +260,7 @@ if [ $stage -le 23 ]; then
     --egs.dir="$common_egs_dir" \
     --egs.opts="--frames-overlap-per-eg 0" \
     --cleanup.remove-egs=$remove_egs \
-    --use-gpu=wait \
+    --use-gpu=yes \
     --reporting.email="$reporting_email" \
     --feat-dir=$train_data_dir \
     --tree-dir=$tree_dir \
@@ -278,7 +268,7 @@ if [ $stage -le 23 ]; then
     --dir=$dir  || exit 1;
 fi
 
-if [ $stage -le 24 ]; then
+if [ $stage -le 22 ]; then
   # The reason we are using data/lang here, instead of $lang, is just to
   # emphasize that it's not actually important to give mkgraph.sh the
   # lang directory with the matched topology (since it gets the
@@ -294,7 +284,8 @@ if [ $stage -le 24 ]; then
 
 fi
 
-if [ $stage -le 25 ]; then
+if [ $stage -le 23 ]; then
+  segment_dir=exp/chain/segmentation${segmentation_affix}
   frames_per_chunk=$(echo $chunk_width | cut -d, -f1)
   rm $dir/.error 2>/dev/null || true
 

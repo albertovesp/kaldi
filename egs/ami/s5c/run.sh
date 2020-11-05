@@ -9,6 +9,11 @@
 # 1. Diarization using x-vector and clustering (AHC, VBx, spectral)
 # 2. Training an overlap detector (using annotations) and corresponding
 # inference on full recordings.
+# 3. Overlap-aware spectral clustering
+
+# The overlap-aware spectral clustering method is based on the paper:
+# D.Raj, Z.Huang, S.Khudanpur, "Multi-class spectral clustering with
+# overlaps for speaker diarization", IEEE SLT 2021.
 
 # We do not provide training script for an x-vector extractor. You
 # can download a pretrained extractor from:
@@ -160,6 +165,22 @@ if [ $stage -le 9 ]; then
     steps/overlap/get_overlap_segments.py data/$dataset/rttm.annotation | grep "overlap" |\
       md-eval.pl -r - -s exp/overlap_$overlap_affix/$dataset/rttm_overlap |\
       awk 'or(/MISSED SPEAKER TIME/,/FALARM SPEAKER TIME/)'
+  done
+fi
+
+# The following stage demonstrates overlap-aware spectral clustering using the
+# output of the overlap detector from the previous stage
+if [ $stage -le 10 ]; then
+  for datadir in ${test_sets}; do
+    ref_rttm=data/${datadir}/rttm.annotation
+
+    nj=$( cat data/$datadir/wav.scp | wc -l )
+    local/diarize_spectral_ol.sh --nj $nj --cmd "$train_cmd" --stage $diarizer_stage \
+      $model_dir data/${datadir} exp/overlap_$overlap_affix/$datadir/rttm_overlap \
+      exp/${datadir}_diarization_spectral_ol
+
+    # Evaluate RTTM using md-eval.pl
+    md-eval.pl -r $ref_rttm -s exp/${datadir}_diarization_spectral_ol/rttm
   done
 fi
 

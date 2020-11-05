@@ -107,7 +107,7 @@ fi
 
 mkdir -p $overlap_dir
 if [ $stage -le 1 ]; then
-  if [ "$(readlink -f $nnet_dir)" != "$(readlink -f $overlap_dir)" ]; then
+  if [ "$(utils/make_absolute.sh $nnet_dir)" != "$(utils/make_absolute.sh $overlap_dir)" ]; then
     cp $nnet_dir/cmvn_opts $overlap_dir || exit 1
   fi
 

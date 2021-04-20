@@ -18,6 +18,8 @@ def get_args():
     parser.add_argument("--append-reco-id-to-spkr", type=str,
                         choices=["true", "false"], default="false",
                         help="Append recording ID to the speaker ID")
+    parser.add_argument("--padding", type=int, default=6,
+                        help="0-padding size for segment ids")
 
     parser.add_argument("rttm_file", type=str,
                         help="""Input RTTM file.
@@ -85,7 +87,7 @@ def main():
 
         st = int(start_time * 100)
         end = int(end_time * 100)
-        utt = "{0}-{1:06d}-{2:06d}".format(spkr, st, end)
+        utt = "{0}-{1:0{width}d}-{2:0{width}d}".format(spkr, st, end, width=args.padding)
         utt2spk[utt]=spkr
         segments[utt]=(reco, start_time, end_time)
 

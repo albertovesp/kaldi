@@ -29,14 +29,13 @@ set -e -o pipefail
 seg_dir=$1
 data_name=$(basename $seg_dir)
 
-if [ ! -d ${seg_dir}/feats.scp ]; then
+if [ ! -f ${seg_dir}/feats.scp ]; then
   echo "$0: Preparing VAD output for diarization"
   
-  > ${seg_dir}/segments_all
-  > ${seg_dir}/utt2spk_all
-  cat ${seg_dir}/wav.scp | grep "U06" > ${seg_dir}/wav.scp
+  mv ${seg_dir}/wav.scp ${seg_dir}/wav.scp.bak
+  cat ${seg_dir}/wav.scp.bak | grep "U06" > ${seg_dir}/wav.scp
   cat ${seg_dir}/segments |\
-    sed "s/${session}/${session}_U06/g" >> ${seg_dir}/segments.new
+    sed "s/${session}/${session}_U06/g" > ${seg_dir}/segments.new
   mv ${seg_dir}/segments ${seg_dir}/segments.bak
   mv ${seg_dir}/segments.new ${seg_dir}/segments
 

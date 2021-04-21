@@ -40,6 +40,8 @@ vad_dir=${test_dir}_max_seg
 steps/segmentation/convert_utt2spk_and_segments_to_rttm.py \
   ${vad_dir}/utt2spk ${vad_dir}/segments ${vad_dir}/rttm
 
+cp ${test_dir}/wav.scp ${vad_dir}/  # needed for diarization
+
 echo "$0: Scoring VAD output.."
 ref_rttm=${test_dir}/ref_rttm
 steps/segmentation/convert_utt2spk_and_segments_to_rttm.py ${test_dir}/utt2spk.bak \

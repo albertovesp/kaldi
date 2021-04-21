@@ -92,7 +92,7 @@ src_data_dir=$1   # The input data directory that needs to be segmented.
 sad_nnet_dir=$2   # The SAD neural network
 mfcc_dir=$3       # The directory to store the features
 dir=$4            # Work directory
-data_dir=$5       # The output data directory will be ${data_dir}_seg
+data_dir=$5       # The output data directory will be ${data_dir}_max_seg
 
 affix=${affix:+_$affix}
 feat_affix=${feat_affix:+_$feat_affix}

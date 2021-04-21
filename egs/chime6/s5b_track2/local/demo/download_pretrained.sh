@@ -18,7 +18,7 @@ if [ ! -d exp/segmentation_1a ]; then
   echo "$0: Downloading CHiME-6 baseline SAD"
   wget -O 0012_sad_v1.tar.gz http://kaldi-asr.org/models/12/0012_sad_v1.tar.gz
   tar -xvzf 0012_sad_v1.tar.gz
-  cp -r 0012_sad_v1/exp/* exp/
+  cp -r 0012_sad_v1/exp/segmentation_1a exp/
 else
   echo "$0: SAD already present. Not downloading again."
 fi

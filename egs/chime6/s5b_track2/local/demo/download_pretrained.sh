@@ -38,7 +38,7 @@ if [ ! -d exp/rnnlm_lstm_1b ]; then
   echo "$0: Downloading JHU-CLSP CNN-TDNNF acoustic model and RNNLM"
   wget -O 0012_asr_v2.tar.gz http://kaldi-asr.org/models/12/0012_asr_v2.tar.gz
   tar -xvzf 0012_asr_v2.tar.gz
-  cp -r 0012_asr_v2/exp/* exp/
+  cp -rL 0012_asr_v2/exp/* exp/
   else
   echo "$0: AM and RNNLM already present. Not downloading again."
 fi

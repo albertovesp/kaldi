@@ -27,17 +27,26 @@ mkdir -p $dir
 result=`$HOME/miniconda3/bin/python -c "\
 try:
     import torch
-    import pyannote.audio
-    print('1')
 except ImportError:
     print('0')"`
 
-if [ "$result" == "1" ]; then
-    echo "Pyannote and PyTorch are installed"
-else
-    echo "PyTorch/Pyannote is not installed. Please install using `source ${miniconda_dir}/bin/activate; pip install torch pyannote.audio`"
-    exit 1
+if [ "$result" == "0" ]; then
+  echo "Installing PyTorch"
+  $HOME/miniconda3/bin/python -m pip install torch
 fi
+
+# check if Pyannote is installed
+result=`$HOME/miniconda3/bin/python -c "\
+try:
+    import pyannote.audio
+except ImportError:
+    print('0')"`
+
+if [ "$result" == "0" ]; then
+  echo "Installing Pyannote"
+  $HOME/miniconda3/bin/python -m pip install pyannote.audio
+fi
+
 
 if [ $stage -le 0 ]; then
   # split wav.scp for faster processing

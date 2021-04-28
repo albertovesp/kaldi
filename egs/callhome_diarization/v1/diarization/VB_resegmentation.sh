@@ -95,6 +95,18 @@ mkdir -p $output_dir/tmp
 sdata=$data_dir/split$nj;
 utils/split_data.sh $data_dir $nj || exit 1;
 
+# check if kaldi_io is installed
+result=`$HOME/miniconda3/bin/python -c "\
+try:
+    import kaldi_io
+except ImportError:
+    print('0')"`
+
+if [ "$result" == "0" ]; then
+  echo "Installing kaldi_io"
+  $HOME/miniconda3/bin/python -m pip install kaldi_io
+fi
+
 save_opts=""
 if [ ! -z "$overlap_rttm" ]; then
   save_opts="--save-posterior"

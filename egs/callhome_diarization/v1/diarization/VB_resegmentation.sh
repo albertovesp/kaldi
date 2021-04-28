@@ -129,7 +129,7 @@ fi
 if [ $stage -le 1 ]; then
   # VB resegmentation
   $cmd JOB=1:$nj $output_dir/log/VB_resegmentation.JOB.log \
-    python3 diarization/VB_resegmentation.py --max-speakers $max_speakers \
+    $HOME/miniconda3/bin/python diarization/VB_resegmentation.py --max-speakers $max_speakers \
       --max-iters $max_iters --downsample $downsample --alphaQInit $alphaQInit \
       --sparsityThr $sparsityThr --epsilon $epsilon --minDur $minDur \
       --loopProb $loopProb --statScale $statScale --llScale $llScale \
@@ -142,7 +142,7 @@ fi
 if [ $stage -le 2 ] && [ ! -z "$overlap_rttm" ]; then
   # Overlap assignment
   $cmd JOB=1:$nj $output_dir/log/VB_overlap.JOB.log \
-    python3 diarization/VB_overlap_assign.py \
+    $HOME/miniconda3/bin/python diarization/VB_overlap_assign.py \
       $sdata/JOB $overlap_rttm $init_rttm_filename $output_dir/tmp || exit 1;
 
   cat $output_dir/tmp/*ovl*.rttm > $output_dir/VB_rttm_ol

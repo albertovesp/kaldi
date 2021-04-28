@@ -107,6 +107,18 @@ if [ "$result" == "0" ]; then
   $HOME/miniconda3/bin/python -m pip install kaldi_io
 fi
 
+# check if numexpr is installed
+result=`$HOME/miniconda3/bin/python -c "\
+try:
+    import numexpr
+except ImportError:
+    print('0')"`
+
+if [ "$result" == "0" ]; then
+  echo "Installing numexpr"
+  $HOME/miniconda3/bin/python -m pip install numexpr
+fi
+
 save_opts=""
 if [ ! -z "$overlap_rttm" ]; then
   save_opts="--save-posterior"

@@ -131,7 +131,7 @@ if [ $stage -le 8 ]; then
   if ! [ -d dscore ]; then
     git clone https://github.com/nryant/dscore.git || exit 1;
     cd dscore
-    python -m pip install --user -r requirements.txt
+    $HOME/miniconda3/bin/python -m pip install --user -r requirements.txt
     cd ..
   fi
   sed 's/_U0[1-6]\.ENH//g' $ref_rttm > $ref_rttm.scoring

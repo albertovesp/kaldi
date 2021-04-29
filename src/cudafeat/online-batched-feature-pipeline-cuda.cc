@@ -37,8 +37,16 @@ OnlineBatchedFeaturePipelineCuda::OnlineBatchedFeaturePipelineCuda(
   ivector_ = NULL;
 
   // Temporary to get frame extraction options
-  MfccComputer computer(info_.mfcc_opts);
-  frame_opts_ = computer.GetFrameOptions();
+  if (info_.feature_type == "mfcc") {
+    MfccComputer computer(info_.mfcc_opts);
+    frame_opts_ = computer.GetFrameOptions();
+  } else if (info_.feature_type == "fbank") {
+    FbankComputer computer(info_.fbank_opts);
+    frame_opts_ = computer.GetFrameOptions();
+  } else {
+    // Which ever base feature was requested is not currently supported
+    KALDI_ASSERT(false);
+  }
 
   // compute maximum chunk size for a given number of samples
   // round up because there may be additional context provided
@@ -57,12 +65,10 @@ OnlineBatchedFeaturePipelineCuda::OnlineBatchedFeaturePipelineCuda(
   }
 
   if (info_.use_cmvn) {
-    KALDI_ASSERT(info_.global_cmvn_stats_rxfilename != "");
-
-    Matrix<double> global_cmvn_stats;
-    ReadKaldiObject(info_.global_cmvn_stats_rxfilename, &global_cmvn_stats);
-
-    OnlineCmvnState cmvn_state(global_cmvn_stats);
+    if (info_.global_cmvn_stats.NumCols() == 0) {
+      KALDI_ERR << "global_cmvn_stats for OnlineCmvn must be non-empty.";
+    }
+    OnlineCmvnState cmvn_state(info_.global_cmvn_stats);
     CudaOnlineCmvnState cu_cmvn_state(cmvn_state);
 
     // TODO do we want to parameterize stats coarsening factor?

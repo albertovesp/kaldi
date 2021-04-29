@@ -136,7 +136,7 @@ if [ $stage -le 4 ]; then
   background_snrs="20:10:15:5:0"
   # corrupt the data to generate multi-condition data
   # for data_dir in train dev test; do
-  python3 steps/data/reverberate_data_dir.py \
+  steps/data/reverberate_data_dir.py \
     "${rvb_opts[@]}" \
     --prefix "rev" \
     --foreground-snrs $foreground_snrs \
@@ -160,7 +160,7 @@ fi
 if [ $stage -le 6 ]; then
   rvb_targets_dirs=()
   for i in `seq 1 $num_data_reps`; do
-    steps/segmentation/copy_targets_dir.sh --utt-prefix "rev${i}_" \
+    steps/segmentation/copy_targets_dir.sh --utt-prefix "rev${i}-" \
       $targets_dir ${targets_dir}_temp_$i || exit 1
     rvb_targets_dirs+=(${targets_dir}_temp_$i)
   done
@@ -171,7 +171,8 @@ if [ $stage -le 6 ]; then
 
   rm -r ${rvb_targets_dirs[@]}
 fi
-exit 1
+
+
 sad_nnet_dir=$dir/tdnn_stats_asr_sad_1a
 
 if [ $stage -le 7 ]; then
@@ -187,7 +188,7 @@ if [ $stage -le 7 ]; then
   #   --targets-dir ${rvb_targets_dir} \
   #   --data-dir ${rvb_data_dir} --affix "1a" || exit 1
 fi
-exit 1
+
 if [ ! -f data/dev_aspire/wav.scp ]; then
   echo "$0: Not evaluating on data/dev_aspire"
   exit 0

@@ -1,25 +1,32 @@
 cmake_minimum_required(VERSION 3.5)
 project(kaldi)
 
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+  set(CMAKE_INSTALL_PREFIX ${CMAKE_SOURCE_DIR}/src CACHE PATH "Install path prefix." FORCE)
+endif(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
 set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake;${CMAKE_MODULE_PATH}")
 include(GNUInstallDirs)
 include(Utils)
 include(third_party/get_third_party)
 
-# Should update cmake to a more recent version which supports FindPython3.
 find_package(PythonInterp)
-if(NOT PYTHON_EXECUTABLE OR PYTHON_VERSION_MAJOR LESS 3)
-    message(WARNING "Needs python3 to auto-generate most CMake files, but not found. "
-                    "Will try `python3` directly...")
-    set(PYTHON_EXECUTABLE "python3")
+if(NOT PYTHON_EXECUTABLE)
+    message(FATAL_ERROR "Needs python to auto-generate most CMake files, but not found.")
 endif()
 
 message(STATUS "Running gen_cmake_skeleton.py")
+option(BUILD_SHARED_LIBS "Build shared Kaldi libraries." OFF)
+set(IS_LIB_SHARE "")
+if(BUILD_SHARED_LIBS)
+    set(IS_LIB_SHARE "--shared")
+endif()
 execute_process(COMMAND ${PYTHON_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/gen_cmake_skeleton.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "--quiet"
+    ${IS_LIB_SHARE}
 )
+unset(IS_LIB_SHARE)
 
 set(CMAKE_CXX_STANDARD 14)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -32,7 +39,7 @@ if(BUILD_SHARED_LIBS)
     elseif(APPLE)
         set(CMAKE_INSTALL_RPATH "@loader_path")
     else()
-        set(CMAKE_INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib")
+        set(CMAKE_INSTALL_RPATH "$ORIGIN;$ORIGIN/../lib;$ORIGIN/../../tools/openfst/lib")
     endif()
 endif()
 
@@ -63,12 +70,16 @@ if(MATHLIB STREQUAL "OpenBLAS")
     include_directories(${CMAKE_CURRENT_SOURCE_DIR}/tools/CLAPACK)
     link_libraries(${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
 elseif(MATHLIB STREQUAL "MKL")
-    set(BLA_VENDOR "Intel10_64lp")
-    # find_package(BLAS REQUIRED)
+    if(NOT DEFINED ENV{MKLROOT} OR "$ENV{MKLROOT}" STREQUAL "")
+        message(FATAL_ERROR "Environment variable MKLROOT is not defined")
+    else()
+        message(STATUS "Finding MKL from \"$ENV{MKLROOT}\"")
+    endif()
     normalize_env_path(ENV{MKLROOT})
+    set(BLA_VENDOR "Intel10_64lp_seq") # use the single threaded MKL by default
     find_package(LAPACK REQUIRED)
     add_definitions(-DHAVE_MKL=1)
-    include_directories($ENV{MKLROOT}/include) # TODO: maybe not use env, idk, find_package doesnt handle includes...
+    include_directories($ENV{MKLROOT}/include)
     link_libraries(${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
 elseif(MATHLIB STREQUAL "Accelerate")
     execute_process(COMMAND sw_vers -productVersion
@@ -113,8 +124,6 @@ endif()
 
 find_package(CUDA)
 if(CUDA_FOUND)
-    set(CUB_ROOT_DIR "${PROJECT_SOURCE_DIR}/tools/cub")
-
     set(CUDA_PROPAGATE_HOST_FLAGS ON)
     set(KALDI_CUDA_NVCC_FLAGS "--default-stream=per-thread;-std=c++${CMAKE_CXX_STANDARD}")
     if(MSVC)
@@ -146,6 +155,8 @@ if(CUDA_FOUND)
     include_directories(${NvToolExt_INCLUDE_DIR})
     link_libraries(${NvToolExt_LIBRARIES})
 
+    get_third_party(cub)
+    set(CUB_ROOT_DIR "${CMAKE_BINARY_DIR}/cub")
     find_package(CUB REQUIRED)
     include_directories(${CUB_INCLUDE_DIR})
 endif()
@@ -158,9 +169,21 @@ if(${KALDI_USE_PATCH_NUMBER})
     set(KALDI_VERSION "${KALDI_VERSION}.${KALDI_PATCH_NUMBER}")
 endif()
 
-get_third_party(openfst)
-set(OPENFST_ROOT_DIR ${CMAKE_CURRENT_BINARY_DIR}/openfst)
-include(third_party/openfst_lib_target)
+# get_third_party(openfst)
+# set(OPENFST_ROOT_DIR ${CMAKE_BINARY_DIR}/openfst)
+# include(third_party/openfst_lib_target)
+find_library(OpenFST_LIBRARY
+            NAMES fst 
+            PATHS ${CMAKE_SOURCE_DIR}/tools/openfst/lib 
+            REQUIRED)
+find_path(OpenFST_INCLUDE_DIR
+            NAMES "fst/fst.h" 
+            PATHS "${CMAKE_SOURCE_DIR}/tools/openfst/include"
+            REQUIRED)
+get_filename_component(OpenFST_LIBRARY_DIR ${OpenFST_LIBRARY} DIRECTORY CACHE)
+mark_as_advanced(FORCE OpenFST_INCLUDE_DIR OpenFST_LIBRARY OpenFST_LIBRARY_DIR)
+include_directories(${OpenFST_INCLUDE_DIR})
+link_directories(${OpenFST_LIBRARY_DIR})
 link_libraries(fst)
 
 # add all native libraries
@@ -203,9 +226,22 @@ if(CUDA_FOUND)
 endif()
 
 # add all native executables
+add_subdirectory(src/bin)
 add_subdirectory(src/gmmbin)
 add_subdirectory(src/featbin)
+add_subdirectory(src/sgmm2bin)
+add_subdirectory(src/fstbin)
+add_subdirectory(src/lmbin)
+add_subdirectory(src/latbin)
+add_subdirectory(src/nnetbin)
+add_subdirectory(src/nnet2bin)
+add_subdirectory(src/nnet3bin)
+add_subdirectory(src/rnnlmbin)
+add_subdirectory(src/chainbin)
+add_subdirectory(src/ivectorbin)
 add_subdirectory(src/onlinebin)
+add_subdirectory(src/online2bin)
+add_subdirectory(src/kwsbin)
 
 # add all cuda executables
 if(CUDA_FOUND)

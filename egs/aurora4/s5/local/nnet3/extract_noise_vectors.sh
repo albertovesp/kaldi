@@ -83,23 +83,25 @@ if [ $stage -le 12 ]; then
     targets_dir=${segment_dir}/${test_dir}_targets
     nspk=$(wc -l <data/${test_dir}/spk2utt)
 
-    utils/mkgraph.sh data/lang_test_tgpr \
-      exp/$gmm exp/$gmm/graph_tgpr || exit 1;
-    steps/decode_fmllr.sh --nj $nspk --cmd "$decode_cmd" --skip-scoring true \
-      exp/$gmm/graph_tgpr data/${test_dir} exp/$gmm/decode_tgpr_${test_dir} || exit 1;
-
+    # utils/mkgraph.sh data/lang_test_tgpr \
+    #   exp/$gmm exp/$gmm/graph_tgpr || exit 1;
+    # steps/nnet3/chain/decode_fmllr.sh --nj $nspk --cmd "$decode_cmd" --skip-scoring true \
+    #   exp/$gmm/graph_tgpr data/${test_dir} exp/$gmm/decode_tgpr_${test_dir} || exit 1;
+    
     steps/segmentation/lats_to_targets.sh \
+      --acwt 1.0 \
+      --frame-subsampling-factor 3 \
       --silence-phones ${segment_dir}/silence_phones.txt \
       --garbage-phones ${segment_dir}/garbage_phones.txt \
       data/${test_dir} $lang_dir exp/$gmm/decode_tgpr_${test_dir} $targets_dir
   done
 fi
- 
+
 if [ $stage -le 13 ]; then
   # Compute speech and noise vectors for test data
   for test_dir in $test_sets; do
     targets_dir=${segment_dir}/${test_dir}_targets
-    noise_vec_dir=exp/nnet3/noise_${test_dir}_hires
+    noise_vec_dir=exp/nnet3/noise_${test_dir}_hires_offline
     mkdir -p $noise_vec_dir
     compute-noise-vector scp:data/${test_dir}_hires/feats.scp scp:$targets_dir/targets.scp \
       ark,scp:$noise_vec_dir/noise_vec.ark,$noise_vec_dir/noise_vec.scp
@@ -108,14 +110,12 @@ fi
 
 if [ $stage -le 14 ]; then
   for test_dir in ${test_sets}; do
-    targets_dir=${segment_dir}/${test_dir}_targets
-    noise_vec_dir=exp/nnet3/noise_${test_dir}_hires
+    noise_vec_dir=exp/nnet3/noise_${test_dir}_hires_offline
     base_feat_dim=$(feat-to-dim scp:data/${test_dir}_hires/feats.scp -) || exit 1;
     start_dim=$base_feat_dim
     noise_dim=$((2*base_feat_dim))
     end_dim=$[$base_feat_dim+$noise_dim-1]
 
-    targets_dir=${segment_dir}/${test_dir}_targets
     $train_cmd $targets_dir/log/duplicate_feats.log \
       append-vector-to-feats scp:data/${test_dir}_hires/feats.scp ark:$noise_vec_dir/noise_vec.ark ark:- \| \
       select-feats "$start_dim-$end_dim" ark:- ark:- \| \
@@ -126,5 +126,5 @@ if [ $stage -le 14 ]; then
     echo 10 > $noise_vec_dir/ivector_period
   done
 fi
-
+exit 1
 exit 0;

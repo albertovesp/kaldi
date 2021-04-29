@@ -74,17 +74,11 @@ if [ $stage -le 3 ]; then
     data/${train_set}_sp data/lang $gmm_dir $ali_dir
 fi
 
-
 # high-resolution features and i-vector extractor,
 if [ $stage -le 5 ] && [ -f data/${train_set}_sp_hires/feats.scp ]; then
   echo "$0: data/${train_set}_sp_hires/feats.scp already exists."
   echo " ... Please either remove it, or rerun this script with stage > 5."
   exit 1
-fi
-
-if [ $stage -le 4 ]; then
-  echo "$0: preparing directory for speed-perturbed data"
-  utils/data/perturb_data_dir_speed_3way.sh data/${train_set} data/${train_set}_sp
 fi
 
 if [ $stage -le 5 ]; then
@@ -96,7 +90,7 @@ if [ $stage -le 5 ]; then
   # them overwrite each other.
   mfccdir=data/${train_set}_sp_hires/data
   if [[ $(hostname -f) == *.clsp.jhu.edu ]] && [ ! -d $mfccdir/storage ]; then
-    utils/create_split_dir.pl /export/b0{5,6,7,8}/$USER/kaldi-data/mfcc/wsj-$(date +'%m_%d_%H_%M')/s5/$mfccdir/storage $mfccdir/storage
+    utils/create_split_dir.pl /export/b0{5,6,7,8}/$USER/kaldi-data/mfcc/aurora4-$(date +'%m_%d_%H_%M')/s5/$mfccdir/storage $mfccdir/storage
   fi
 
   for datadir in ${train_set}_sp ${test_sets}; do
@@ -159,9 +153,9 @@ if [ $stage -le 8 ]; then
   # note, we don't encode the 'max2' in the name of the ivectordir even though
   # that's the data we extract the ivectors from, as it's still going to be
   # valid for the non-'max2' data; the utterance list is the same.
-  ivectordir=exp/nnet3${nnet3_affix}/ivectors_${train_set}_sp_hires
+  ivectordir=exp/nnet3${nnet3_affix}/ivectors_${train_set}_sp_hires_offline
   if [[ $(hostname -f) == *.clsp.jhu.edu ]] && [ ! -d $ivectordir/storage ]; then
-    utils/create_split_dir.pl /export/b0{5,6,7,8}/$USER/kaldi-data/ivectors/wsj-$(date +'%m_%d_%H_%M')/s5/$ivectordir/storage $ivectordir/storage
+    utils/create_split_dir.pl /export/b0{5,6,7,8}/$USER/kaldi-data/ivectors/aurora4-$(date +'%m_%d_%H_%M')/s5/$ivectordir/storage $ivectordir/storage
   fi
 
   # We now extract iVectors on the speed-perturbed training data .  With
@@ -182,11 +176,11 @@ if [ $stage -le 8 ]; then
 
   # Also extract iVectors for the test data, but in this case we don't need the speed
   # perturbation (sp).
-  for data in ${test_sets}; do
-    nspk=$(wc -l <data/${data}_hires/spk2utt)
+  for data in eval92 0166; do
+    nspk=$(wc -l <data/test_${data}_hires/spk2utt)
     steps/online/nnet2/extract_ivectors_online.sh --cmd "$train_cmd" --nj "${nspk}" \
-      data/${data}_hires exp/nnet3${nnet3_affix}/extractor \
-      exp/nnet3${nnet3_affix}/ivectors_${data}_hires
+      data/test_${data}_hires exp/nnet3${nnet3_affix}/extractor \
+      exp/nnet3${nnet3_affix}/ivectors_test_${data}_hires
   done
 fi
 

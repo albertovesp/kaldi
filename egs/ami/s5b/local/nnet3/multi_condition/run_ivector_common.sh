@@ -66,14 +66,13 @@ if [ $stage -le 1 ]; then
   # features; this helps make trained nnets more invariant to test data volume.
   utils/data/perturb_data_dir_volume.sh data/$mic/${train_set}_sp_hires
 
-  for datadir in ${train_set}_sp dev eval; do
+  for datadir in ${train_set}_sp; do
     steps/make_mfcc.sh --nj $nj --mfcc-config conf/mfcc_hires.conf \
       --cmd "$train_cmd --max-jobs-run $max_jobs_run" data/$mic/${datadir}_hires
     steps/compute_cmvn_stats.sh data/$mic/${datadir}_hires
     utils/fix_data_dir.sh data/$mic/${datadir}_hires
   done
 fi
-
 
 if [ $stage -le 3 ]; then
   echo "$0: creating reverberated MFCC features"
@@ -119,7 +118,7 @@ if [ $stage -le 3 ]; then
 
   utils/combine_data.sh data/${mic}/${train_set}_sp${rvb_affix}_hires data/${mic}/${train_set}_sp_hires ${norvb_datadir}${rvb_affix}${num_data_reps}_hires
 fi
-
+exit 1
 if [ $stage -le 4 ]; then
   utils/combine_data.sh data/${mic}/${train_set}_sp${rvb_affix}_hires data/${mic}/${train_set}_sp_hires ${norvb_datadir}${rvb_affix}${num_data_reps}_hires
 

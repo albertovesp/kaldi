@@ -41,7 +41,6 @@ int main(int argc, char *argv[]) {
         "E.g.: compute-noise-vector [options] scp:feats.scp scp:targets.scp ark:-\n";
 
     ParseOptions po(usage);
-
     po.Read(argc, argv);
 
     if (po.NumArgs() != 3) {

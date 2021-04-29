@@ -33,7 +33,7 @@ nnet3_affix=       # affix for exp dirs, e.g. it was _cleaned in tedlium.
 segmentation_affix=
 
 # Options which are not passed through to run_ivector_common.sh
-affix=1b #affix for TDNN directory e.g. "1a" or "1b", in case we change the configuration.
+affix=1b3 #affix for TDNN directory e.g. "1a" or "1b", in case we change the configuration.
 common_egs_dir=
 reporting_email=
 
@@ -71,16 +71,27 @@ where "nvcc" is installed.
 EOF
 fi
 
+# local/nnet3/extract_noise_vectors_bottleneck.sh \
+#   --stage $stage --nj $nj \
+#   exp/nnet3_noise data/${train_set}_sp_hires \
+#   exp/nnet3/noise_${train_set}_sp_hires_bottleneck
+# for test_dir in $test_sets; do
+#   local/nnet3/extract_noise_vectors_bottleneck.sh \
+#     --stage $stage --nj 8 \
+#     exp/nnet3_noise data/${test_dir}_hires \
+#     exp/nnet3/noise_${test_dir}_hires_bottleneck
+# done
+
 # The following script handles stages 1 to 8
-local/nnet3/run_ivector_common.sh \
-  --stage $stage --nj $nj \
-  --train-set $train_set --gmm $gmm \
-  --test-sets "$test_sets" \
-  --num-threads-ubm $num_threads_ubm \
-  --nj-extractor $nj_extractor \
-  --num-processes-extractor $num_processes_extractor \
-  --num-threads-extractor $num_threads_extractor \
-  --nnet3-affix "$nnet3_affix"
+# local/nnet3/run_ivector_common.sh \
+#   --stage $stage --nj $nj \
+#   --train-set $train_set --gmm $gmm \
+#   --test-sets "$test_sets" \
+#   --num-threads-ubm $num_threads_ubm \
+#   --nj-extractor $nj_extractor \
+#   --num-processes-extractor $num_processes_extractor \
+#   --num-threads-extractor $num_threads_extractor \
+#   --nnet3-affix "$nnet3_affix"
 
 # The following script handles stages 9 to 14
 local/nnet3/extract_noise_vectors.sh \
@@ -94,7 +105,7 @@ ali_dir=exp/${gmm}_ali_${train_set}_sp
 lat_dir=exp/chain${nnet3_affix}/${gmm}_${train_set}_sp_lats
 dir=exp/chain${nnet3_affix}/tdnn${affix}_sp
 train_data_dir=data/${train_set}_sp_hires
-train_ivector_dir=exp/nnet3${nnet3_affix}/ivectors_${train_set}_sp_hires
+train_ivector_dir=exp/nnet3${nnet3_affix}/noise_${train_set}_sp_hires_bottleneck
 lores_train_data_dir=data/${train_set}_sp
 segment_dir=exp/chain/segmentation${segmentation_affix}
 
@@ -128,7 +139,7 @@ tree_dir=exp/chain${nnet3_affix}/tree_a_sp
 # you should probably name it differently.
 lang=data/lang_chain
 
-for f in $train_data_dir/feats.scp ${train_ivector_dir}_noise/ivector_online.scp \
+for f in $train_data_dir/feats.scp ${train_ivector_dir}/ivector_online.scp \
     $lores_train_data_dir/feats.scp $gmm_dir/final.mdl \
     $ali_dir/ali.1.gz $gmm_dir/final.mdl; do
   [ ! -f $f ] && echo "$0: expected file $f to exist" && exit 1
@@ -195,7 +206,7 @@ if [ $stage -le 20 ]; then
 
   mkdir -p $dir/configs
   cat <<EOF > $dir/configs/network.xconfig
-  input dim=180 name=ivector
+  input dim=79 name=ivector
   input dim=40 name=input
 
   fixed-affine-layer name=lda input=Append(-1,0,1,ReplaceIndex(ivector, t, 0)) affine-transform-file=$dir/configs/lda.mat
@@ -235,7 +246,7 @@ if [ $stage -le 21 ]; then
 
   steps/nnet3/chain/train.py --stage=$train_stage \
     --cmd="$train_cmd" \
-    --feat.online-ivector-dir=${train_ivector_dir}_noise \
+    --feat.online-ivector-dir=${train_ivector_dir} \
     --feat.cmvn-opts="--norm-means=false --norm-vars=false" \
     --chain.xent-regularize $xent_regularize \
     --chain.leaky-hmm-coefficient=0.1 \
@@ -288,7 +299,7 @@ if [ $stage -le 23 ]; then
   segment_dir=exp/chain/segmentation${segmentation_affix}
   frames_per_chunk=$(echo $chunk_width | cut -d, -f1)
   rm $dir/.error 2>/dev/null || true
-
+  beam=8
   for data in $test_sets; do
     data_affix=$(echo $data | sed s/test_//)
     nspk=$(wc -l <data/${data}_hires/spk2utt)
@@ -300,8 +311,8 @@ if [ $stage -le 23 ]; then
         --extra-right-context-final 0 \
         --frames-per-chunk $frames_per_chunk \
         --nj $nspk --cmd "$decode_cmd"  --num-threads 4 \
-        --online-ivector-dir exp/nnet3${nnet3_affix}/ivectors_${data}_hires_noise \
-        $tree_dir/graph_${lmtype} data/${data}_hires ${dir}/decode_${lmtype}_${data_affix} || exit 1
+        --online-ivector-dir exp/nnet3${nnet3_affix}/noise_${data}_hires_beam$beam \
+        $tree_dir/graph_${lmtype} data/${data}_hires ${dir}/decode_${lmtype}_${data_affix}_beam$beam || exit 1
     done
   done
   [ -f $dir/.error ] && echo "$0: there was a problem while decoding" && exit 1

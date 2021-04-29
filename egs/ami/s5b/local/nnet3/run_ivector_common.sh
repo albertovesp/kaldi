@@ -177,7 +177,7 @@ if [ $stage -le 7 ]; then
   # note, we don't encode the 'max2' in the name of the ivectordir even though
   # that's the data we extract the ivectors from, as it's still going to be
   # valid for the non-'max2' data, the utterance list is the same.
-  ivectordir=exp/$mic/nnet3${nnet3_affix}/ivectors_${train_set}_sp_hires_comb
+  ivectordir=exp/$mic/nnet3${nnet3_affix}/ivectors_${train_set}_sp_hires_comb_lda
   if [[ $(hostname -f) == *.clsp.jhu.edu ]] && [ ! -d $ivectordir/storage ]; then
     utils/create_split_dir.pl /export/b0{5,6,7,8}/$USER/kaldi-data/ivectors/ami-$mic-$(date +'%m_%d_%H_%M')/s5/$ivectordir/storage $ivectordir/storage
   fi
@@ -190,19 +190,21 @@ if [ $stage -le 7 ]; then
   # having a larger number of speakers is helpful for generalization, and to
   # handle per-utterance decoding well (iVector starts at zero).
   temp_data_root=${ivectordir}
-  #utils/data/modify_speaker_info.sh --utts-per-spk-max 2 \
-  #  data/${mic}/${train_set}_sp_hires_comb ${temp_data_root}/${train_set}_sp_hires_comb_max2
+  utils/data/modify_speaker_info.sh --utts-per-spk-max 2 \
+    data/${mic}/${train_set}_sp_hires_comb ${temp_data_root}/${train_set}_sp_hires_comb_max2
 
-  #steps/online/nnet2/extract_ivectors_online.sh --cmd "$train_cmd" --nj $nj \
-  #  ${temp_data_root}/${train_set}_sp_hires_comb_max2 \
-  #  exp/$mic/nnet3${nnet3_affix}/extractor $ivectordir
+  steps/online/nnet2/extract_ivectors.sh --cmd "$train_cmd" --nj $nj \
+    --transform-mat exp/noise_lda/transform.mat \
+    ${temp_data_root}/${train_set}_sp_hires_comb_max2 data/lang \
+    exp/$mic/nnet3${nnet3_affix}/extractor $ivectordir
 
   # Also extract iVectors for the test data, but in this case we don't need the speed
   # perturbation (sp) or small-segment concatenation (comb).
-  for data in dev_sil eval_sil; do
-    steps/online/nnet2/extract_ivectors_online.sh --cmd "$train_cmd" --nj "$nj" \
-      data/${mic}/${data}_hires exp/$mic/nnet3${nnet3_affix}/extractor \
-      exp/$mic/nnet3${nnet3_affix}/ivectors_${data}_hires
+  for data in dev eval; do
+    steps/online/nnet2/extract_ivectors.sh --cmd "$train_cmd" --nj "$nj" \
+      --transform-mat exp/noise_lda/transform.mat \
+      data/${mic}/${data}_hires data/lang exp/$mic/nnet3${nnet3_affix}/extractor \
+      exp/$mic/nnet3${nnet3_affix}/ivectors_${data}_hires_lda
   done
 fi
 

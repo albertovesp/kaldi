@@ -52,7 +52,7 @@ mdl=final  # change this if decode directory did not have ../final.mdl present.
 num_threads=1 # Number of threads used by ivector-extract.  It is usually not
               # helpful to set this to > 1.  It is only useful if you have
               # fewer speakers than the number of jobs you want to run.
-
+transform_mat= # If provided, ivectors will be transformed using this LDA transform matrix
 # End configuration section.
 
 echo "$0 $@"  # Print the command line for logging
@@ -245,24 +245,35 @@ if [ $stage -le 2 ]; then
         --max-count=$max_count --spk2utt=ark:$this_sdata/JOB/spk2utt \
       $srcdir/final.ie "$feats" ark,s,cs:- ark,t:$dir/ivectors_spk.JOB.ark || exit 1;
   else
-    $cmd --num-threads $num_threads JOB=1:$nj $dir/log/extract_ivectors.JOB.log \
-      gmm-global-get-post --n=$num_gselect --min-post=$min_post $srcdir/final.dubm "$gmm_feats" ark:- \| \
-      ivector-extract --num-threads=$num_threads --acoustic-weight=$posterior_scale --compute-objf-change=true \
-        --max-count=$max_count --spk2utt=ark:$this_sdata/JOB/spk2utt \
-      $srcdir/final.ie "$feats" ark,s,cs:- ark,t:$dir/ivectors_spk.JOB.ark || exit 1;
+    if [ ! -z "$transform_mat" ]; then
+      $cmd --num-threads $num_threads JOB=1:$nj $dir/log/extract_ivectors.JOB.log \
+        gmm-global-get-post --n=$num_gselect --min-post=$min_post $srcdir/final.dubm "$gmm_feats" ark:- \| \
+        ivector-extract --num-threads=$num_threads --acoustic-weight=$posterior_scale --compute-objf-change=true \
+          --max-count=$max_count \
+        $srcdir/final.ie "$feats" ark,s,cs:- ark:- \| \
+        ivector-transform $transform_mat ark:- ark,t:$dir/ivectors_utt.JOB.ark || exit 1;
+    else
+      $cmd --num-threads $num_threads JOB=1:$nj $dir/log/extract_ivectors.JOB.log \
+        gmm-global-get-post --n=$num_gselect --min-post=$min_post $srcdir/final.dubm "$gmm_feats" ark:- \| \
+        ivector-extract --num-threads=$num_threads --acoustic-weight=$posterior_scale --compute-objf-change=true \
+          --max-count=$max_count \
+        $srcdir/final.ie "$feats" ark,s,cs:- ark,t,scp:$dir/ivectors_utt.JOB.ark,$dir/ivectors_utt.JOB.scp || exit 1;
+
+      cat $dir/ivectors_utt.*.scp > $dir/ivectors_utt.scp
+    fi
   fi
 fi
 
 # get an utterance-level set of iVectors (just duplicate the speaker-level ones).
 # note: if $this_sdata is set $dir/split$nj, then these won't be real speakers, they'll
 # be "sub-speakers" (speakers split up into multiple utterances).
-if [ $stage -le 3 ]; then
-  for j in $(seq $nj); do
-    utils/apply_map.pl -f 2 $dir/ivectors_spk.$j.ark <$this_sdata/$j/utt2spk >$dir/ivectors_utt.$j.ark || exit 1;
-  done
-fi
+# if [ $stage -le 3 ]; then
+#   for j in $(seq $nj); do
+#     utils/apply_map.pl -f 2 $dir/ivectors_spk.$j.ark <$this_sdata/$j/utt2spk >$dir/ivectors_utt.$j.ark || exit 1;
+#   done
+# fi
 
-ivector_dim=$[$(head -n 1 $dir/ivectors_spk.1.ark | wc -w) - 3] || exit 1;
+ivector_dim=$[$(head -n 1 $dir/ivectors_utt.1.ark | wc -w) - 3] || exit 1;
 echo  "$0: iVector dim is $ivector_dim"
 
 base_feat_dim=$(feat-to-dim scp:$data/feats.scp -) || exit 1;

@@ -292,9 +292,13 @@ class OnlineSilenceDetection {
   // UpdateNvectors with the output.
   //
   // Returned frame-index is in pipeline frames from the pipeline start.
+  template <typename FST>
   void GetSilenceDecisions(
-      const LatticeFasterOnlineDecoder &decoder,
+      const LatticeFasterOnlineDecoderTpl<FST> &decoder,
       int32 first_decoder_frame, std::vector<std::pair<int32, bool> > *silence_frames);
+
+
+  void ClearFrameInfo();
 
  private:
   const TransitionModel &trans_model_;

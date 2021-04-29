@@ -19,7 +19,7 @@ mkdir -p $data
 for part in dev-clean-2 train-clean-5; do
   local/download_and_untar.sh $data $data_url $part
 done
-
+exit 1
 if [ $stage -le 0 ]; then
   local/download_lm.sh $lm_url $data data/local/lm
 fi

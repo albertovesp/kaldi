@@ -35,7 +35,7 @@ set -e # exit on error
 chime5_corpus=/export/corpora4/CHiME5
 # chime6 data directories, which are generated from ${chime5_corpus},
 # to synchronize audio files across arrays and modify the annotation (JSON) file accordingly
-chime6_corpus=${PWD}/CHiME6
+chime6_corpus=/export/c12/aarora8/CHiME6
 json_dir=${chime6_corpus}/transcriptions
 audio_dir=${chime6_corpus}/audio
 
@@ -194,7 +194,7 @@ fi
 ##########################################################################
 # DECODING: we perform 2 stage decoding.
 ##########################################################################
-
+exit 1
 nnet3_affix=_${train_set}_cleaned_rvb
 lm_suffix=
 

@@ -29,7 +29,7 @@ set -euo pipefail
 AMI_DIR=$PWD/wav_db # Default,
 case $(hostname -d) in
   fit.vutbr.cz) AMI_DIR=/mnt/matylda5/iveselyk/KALDI_AMI_WAV ;; # BUT,
-  clsp.jhu.edu) AMI_DIR=/export/corpora4/ami/amicorpus ;; # JHU,
+  clsp.jhu.edu) AMI_DIR=/export/corpora5/amicorpus ;; # JHU,
   cstr.ed.ac.uk) AMI_DIR= ;; # Edinburgh,
 esac
 
@@ -71,7 +71,7 @@ if [ $stage -le 2 ]; then
 fi
 
 if [ $stage -le 3 ]; then
-  for dset in train dev eval; do
+  for dset in train; do
     # this splits up the speakers (which for sdm and mdm just correspond
     # to recordings) into 30-second chunks.  It's like a very brain-dead form
     # of diarization; we can later replace it with 'real' diarization.
@@ -90,7 +90,7 @@ fi
 
 # Feature extraction,
 if [ $stage -le 4 ]; then
-  for dset in train dev eval; do
+  for dset in train; do
     steps/make_mfcc.sh --nj 15 --cmd "$train_cmd" data/$mic/$dset
     steps/compute_cmvn_stats.sh data/$mic/$dset
     utils/fix_data_dir.sh data/$mic/$dset
@@ -124,13 +124,13 @@ if [ $stage -le 7 ]; then
   steps/align_fmllr.sh --nj $nj --cmd "$train_cmd" \
     data/$mic/train data/lang exp/$mic/tri2 exp/$mic/tri2_ali
   # Decode
-   graph_dir=exp/$mic/tri2/graph_${LM}
-  $decode_cmd --mem 4G $graph_dir/mkgraph.log \
-    utils/mkgraph.sh data/lang_${LM} exp/$mic/tri2 $graph_dir
-  steps/decode.sh --nj $nj --cmd "$decode_cmd" --config conf/decode.conf \
-    $graph_dir data/$mic/dev exp/$mic/tri2/decode_dev_${LM}
-  steps/decode.sh --nj $nj --cmd "$decode_cmd" --config conf/decode.conf \
-    $graph_dir data/$mic/eval exp/$mic/tri2/decode_eval_${LM}
+  # graph_dir=exp/$mic/tri2/graph_${LM}
+  #$decode_cmd --mem 4G $graph_dir/mkgraph.log \
+  #  utils/mkgraph.sh data/lang_${LM} exp/$mic/tri2 $graph_dir
+  #steps/decode.sh --nj $nj --cmd "$decode_cmd" --config conf/decode.conf \
+  #  $graph_dir data/$mic/dev exp/$mic/tri2/decode_dev_${LM}
+  #steps/decode.sh --nj $nj --cmd "$decode_cmd" --config conf/decode.conf \
+  #  $graph_dir data/$mic/eval exp/$mic/tri2/decode_eval_${LM}
 fi
 
 
@@ -162,7 +162,7 @@ if [ $stage -le 10 ]; then
   # you can reduce it using the --nj option if you want.
   local/run_cleanup_segmentation.sh --mic $mic
 fi
-exit 1
+
 if [ $stage -le 11 ]; then
   ali_opt=
   [ "$mic" != "ihm" ] && ali_opt="--use-ihm-ali true"

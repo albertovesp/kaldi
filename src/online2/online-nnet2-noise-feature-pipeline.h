@@ -70,8 +70,6 @@ namespace kaldi {
 struct OnlineNnet2NoiseFeaturePipelineConfig {
   std::string feature_type;  // "plp" or "mfcc" or "fbank"
   std::string mfcc_config;
-  std::string cmvn_config;
-  std::string global_cmvn_stats_rxfilename;
 
   // Note: if we do add pitch, it will not be added to the features we give to
   // the noise vector computation but only to the features we give to the neural
@@ -95,18 +93,11 @@ struct OnlineNnet2NoiseFeaturePipelineConfig {
   void Register(OptionsItf *opts) {
     opts->Register("feature-type", &feature_type,
                    "Base feature type [mfcc, plp, fbank]");
-    opts->Register("mfcc-hires-config", &mfcc_config, "Configuration file for "
+    opts->Register("mfcc-config", &mfcc_config, "Configuration file for "
                    "MFCC features (e.g. conf/mfcc.conf)");
-    opts->Register("cmvn-config", &cmvn_config, "Configuration file for "
-                   "online cmvn features (e.g. conf/online_cmvn.conf). "
-                   "Controls features on nnet3 input (not noise vector features). "
-                   "If not set, the OnlineCmvn is disabled.");
     opts->Register("nvector-extraction-config", &nvector_extraction_config,
                    "Configuration file for online noise vector extraction, "
                    "see class OnlineNvectorExtractionConfig in the code");
-    opts->Register("global-cmvn-stats", &global_cmvn_stats_rxfilename,
-                   "filename with global stats for OnlineCmvn for features "
-                   "on nnet3 input (not noise vector features)");
     opts->Register("add-pitch", &add_pitch, "Append pitch features to raw "
                    "MFCC/PLP/filterbank features [but not for noise vector computation]");
     opts->Register("online-pitch-config", &online_pitch_config, "Configuration "
@@ -128,7 +119,7 @@ struct OnlineNnet2NoiseFeaturePipelineConfig {
 /// multithreaded operation.
 struct OnlineNnet2NoiseFeaturePipelineInfo {
   OnlineNnet2NoiseFeaturePipelineInfo():
-      feature_type("mfcc"), add_pitch(false), use_cmvn(false) { }
+      feature_type("mfcc"), add_pitch(false) { }
 
   OnlineNnet2NoiseFeaturePipelineInfo(
       const OnlineNnet2NoiseFeaturePipelineConfig &config);
@@ -146,13 +137,6 @@ struct OnlineNnet2NoiseFeaturePipelineInfo {
   bool add_pitch;
   PitchExtractionOptions pitch_opts;  /// Options for pitch extraction, if done.
   ProcessPitchOptions pitch_process_opts;  /// Options for pitch post-processing
-
-  /// If the user specified --cmvn-config, we set 'use_cmvn' to true,
-  /// and the OnlineCmvn is added to the feature preparation pipeline.
-  bool use_cmvn;
-  OnlineCmvnOptions cmvn_opts; /// Options for online cmvn, read from config file.
-  std::string global_cmvn_stats_rxfilename;  /// Filename used for reading global
-                                             /// cmvn stats in OnlineCmvn.
 
   /// If the user specified --nvector-extraction-config, we assume we're using
   /// noise vectors as an extra input to the neural net.  Actually, we don't
@@ -214,11 +198,6 @@ class OnlineNnet2NoiseFeaturePipeline: public OnlineFeatureInterface {
   void GetAdaptationState(
       OnlineNvectorEstimationParams *adaptation_state) const;
 
-  /// Set the CMVN state to a particular value.
-  /// (for features on nnet3 input, not the n-vector input).
-  void SetCmvnState(const OnlineCmvnState &cmvn_state);
-  void GetCmvnState(OnlineCmvnState *cmvn_state);
-
   /// Accept more data to process.  It won't actually process it until you call
   /// GetFrame() [probably indirectly via (decoder).AdvanceDecoding()], when you
   /// call this function it will just copy it).  sampling_rate is necessary just
@@ -265,19 +244,10 @@ class OnlineNnet2NoiseFeaturePipeline: public OnlineFeatureInterface {
   OnlinePitchFeature *pitch_;          /// Raw pitch, if used
   OnlineProcessPitch *pitch_feature_;  /// Processed pitch, if pitch used.
 
-  OnlineCmvn *cmvn_feature_;
-  Matrix<BaseFloat> lda_mat_;          /// LDA matrix, if supplied
-  Matrix<double> global_cmvn_stats_;   /// Global CMVN stats.
-
   /// feature_plus_optional_pitch_ is the base_feature_ appended (OnlineAppendFeature)
   /// with pitch_feature_, if used; otherwise, points to the same address as
   /// base_feature_.
   OnlineFeatureInterface *feature_plus_optional_pitch_;
-
-  /// feature_plus_optional_cmvn_ is the feature_plus_optional_pitch_
-  /// transformed with OnlineCmvn if cmvn is active; otherwise, points
-  /// to the same address as feature_plus_optional_pitch_.
-  OnlineFeatureInterface *feature_plus_optional_cmvn_;
 
   OnlineNvectorFeature *nvector_feature_;  /// noise vector feature, if used.
 
@@ -286,7 +256,7 @@ class OnlineNnet2NoiseFeaturePipeline: public OnlineFeatureInterface {
   /// This pointer is returned by InputFeature().
   OnlineFeatureInterface *nnet3_feature_;
 
-  /// final_feature_ is feature_plus_optional_cmvn_ appended
+  /// final_feature_ is feature_plus_optional_pitch_ appended
   /// (OnlineAppendFeature) with noise_vector_feature_
   OnlineFeatureInterface *final_feature_;
 

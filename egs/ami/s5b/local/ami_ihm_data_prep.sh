@@ -104,6 +104,7 @@ for f in spk2utt utt2spk wav.scp text segments reco2file_and_channel; do
   cp $dir/$f $odir/$f || exit 1;
 done
 
+utils/fix_data_dir.sh $odir
 utils/validate_data_dir.sh --no-feats $odir || exit 1;
 
 echo AMI IHM data preparation succeeded.

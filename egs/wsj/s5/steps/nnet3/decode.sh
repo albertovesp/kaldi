@@ -6,7 +6,7 @@
 # This script does decoding with a neural-net.
 
 # Begin configuration section.
-stage=3
+stage=1
 nj=4 # number of decoding jobs.
 acwt=0.1  # Just a default value, used for adaptation and beam-pruning..
 post_decode_acwt=1.0  # can be used in 'chain' systems to scale acoustics by 10 so the
@@ -147,7 +147,6 @@ if [ $stage -le 1 ]; then
      --word-symbol-table=$graphdir/words.txt "$model" \
      $graphdir/HCLG.fst "$feats" "$lat_wspecifier" || exit 1;
 fi
-
 
 if [ $stage -le 2 ]; then
   if ! $skip_diagnostics ; then

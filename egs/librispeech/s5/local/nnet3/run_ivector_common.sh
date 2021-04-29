@@ -128,7 +128,7 @@ if [ $stage -le 6 ]; then
   echo "$0: extracting iVectors for training data"
   ivectordir=exp/nnet3${nnet3_affix}/ivectors_${train_set}_sp_hires
   if [[ $(hostname -f) == *.clsp.jhu.edu ]] && [ ! -d $ivectordir/storage ]; then
-    utils/create_split_dir.pl /export/b{09,10,11,12}/$USER/kaldi-data/ivectors/librispeech-$(date +'%m_%d_%H_%M')/s5/$ivectordir/storage $ivectordir/storage
+    utils/create_split_dir.pl /export/b{09,10,12}/$USER/kaldi-data/ivectors/librispeech-$(date +'%m_%d_%H_%M')/s5/$ivectordir/storage $ivectordir/storage
   fi
   # We extract iVectors on the speed-perturbed training data after combining
   # short segments, which will be what we train the system on.  With
@@ -138,12 +138,12 @@ if [ $stage -le 6 ]; then
 
   # having a larger number of speakers is helpful for generalization, and to
   # handle per-utterance decoding well (iVector starts at zero).
-  utils/data/modify_speaker_info.sh --utts-per-spk-max 2 \
-    data/${train_set}_sp_hires ${ivectordir}/${train_set}_sp_hires_max2
+  #utils/data/modify_speaker_info.sh --utts-per-spk-max 2 \
+  #  data/${train_set}_sp_hires ${ivectordir}/${train_set}_sp_hires_max2
 
-  steps/online/nnet2/extract_ivectors_online.sh --cmd "$train_cmd" --nj 60 \
-    ${ivectordir}/${train_set}_sp_hires_max2 exp/nnet3${nnet3_affix}/extractor \
-    $ivectordir || exit 1;
+  #steps/online/nnet2/extract_ivectors_online.sh --cmd "$train_cmd" --nj 60 \
+  #  ${ivectordir}/${train_set}_sp_hires_max2 exp/nnet3${nnet3_affix}/extractor \
+  #  $ivectordir || exit 1;
 fi
 
 if [ $stage -le 7 ]; then

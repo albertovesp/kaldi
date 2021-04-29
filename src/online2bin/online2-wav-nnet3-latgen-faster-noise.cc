@@ -23,7 +23,6 @@
 #include "online2/online-nnet3-decoding.h"
 #include "online2/online-nnet2-noise-feature-pipeline.h"
 #include "online2/onlinebin-util.h"
-#include "online2/online-gmm-decoding.h"
 #include "online2/online-timing.h"
 #include "fstext/fstext-lib.h"
 #include "lat/lattice-functions.h"
@@ -96,16 +95,13 @@ int main(int argc, char *argv[]) {
         "you want to decode utterance by utterance.\n";
 
     ParseOptions po(usage);
-    ParseOptions po_gmm("gmm", &po);
 
     std::string word_syms_rxfilename;
 
     // feature_opts includes configuration for n-vector extraction
     // and silence detection, as well as the basic features.
     OnlineNnet2NoiseFeaturePipelineConfig feature_opts;
-    OnlineFeaturePipelineCommandLineConfig feature_cmdline_config;
     nnet3::NnetSimpleLoopedComputationOptions decodable_opts;
-    OnlineGmmDecodingConfig gmm_decode_config;
     LatticeFasterDecoderConfig decoder_opts;
 
     BaseFloat chunk_length_secs = 0.18;
@@ -117,9 +113,7 @@ int main(int argc, char *argv[]) {
                 "Symbol table for words [for debug output]");
 
     feature_opts.Register(&po);
-    feature_cmdline_config.Register(&po_gmm);
     decodable_opts.Register(&po);
-    gmm_decode_config.Register(&po_gmm);
     decoder_opts.Register(&po);
 
     po.Read(argc, argv);
@@ -136,17 +130,8 @@ int main(int argc, char *argv[]) {
         wav_rspecifier = po.GetArg(5),
         clat_wspecifier = po.GetArg(6);
 
-    OnlineFeaturePipelineConfig feature_config(feature_cmdline_config);
-    OnlineFeaturePipeline pipeline_prototype(feature_config);
     OnlineNnet2NoiseFeaturePipelineInfo feature_info(feature_opts);
-    // The following object initializes the models we use in decoding.
-    OnlineGmmDecodingModels gmm_models(gmm_decode_config);
     
-    Matrix<double> global_cmvn_stats;
-    if (feature_info.global_cmvn_stats_rxfilename != "")
-      ReadKaldiObject(feature_info.global_cmvn_stats_rxfilename,
-                      &global_cmvn_stats);
-
     OnlineNvectorEstimationParams noise_prior;
     if (noise_prior_rxfilename != "")
       ReadKaldiObject(noise_prior_rxfilename, &noise_prior);
@@ -192,9 +177,7 @@ int main(int argc, char *argv[]) {
       std::string spk = spk2utt_reader.Key();
       const std::vector<std::string> &uttlist = spk2utt_reader.Value();
 
-      OnlineGmmAdaptationState gmm_adaptation_state;
       OnlineNvectorEstimationParams adaptation_state(noise_prior);
-      OnlineCmvnState cmvn_state(global_cmvn_stats);
       OnlineSilenceDetection silence_detection(trans_model,
           feature_info.silence_phones_str);
 
@@ -211,15 +194,9 @@ int main(int argc, char *argv[]) {
         // take the first channel).
         SubVector<BaseFloat> data(wave_data.Data(), 0);
 
-        SingleUtteranceGmmDecoder gmm_decoder(gmm_decode_config,
-                                          gmm_models,
-                                          pipeline_prototype,
-                                          *decode_fst,
-                                          gmm_adaptation_state);
-
         OnlineNnet2NoiseFeaturePipeline feature_pipeline(feature_info);
         feature_pipeline.SetAdaptationState(adaptation_state);
-        feature_pipeline.SetCmvnState(cmvn_state);
+        silence_detection.ClearFrameInfo();
 
         SingleUtteranceNnet3Decoder nnet3_decoder(decoder_opts, trans_model,
                                             decodable_info,
@@ -244,36 +221,27 @@ int main(int argc, char *argv[]) {
                                                          : samp_remaining;
 
           SubVector<BaseFloat> wave_part(data, samp_offset, num_samp);
-          gmm_decoder.FeaturePipeline().AcceptWaveform(samp_freq, wave_part);
-          std::cout << "GMM feats = " << gmm_decoder.FeaturePipeline().NumFramesReady() << std::endl;
           feature_pipeline.AcceptWaveform(samp_freq, wave_part);
-          std::cout << "Nnet feats = " << feature_pipeline.NumFramesReady() << std::endl;
 
           samp_offset += num_samp;
           decoding_timer.WaitUntil(samp_offset / samp_freq);
           if (samp_offset == data.Dim()) {
             // no more input. flush out last frames
-            gmm_decoder.FeaturePipeline().InputFinished();
             feature_pipeline.InputFinished();
           }
           
-          if (feature_pipeline.NvectorFeature() != NULL) {
-            gmm_decoder.AdvanceDecoding();
-            silence_detection.GetSilenceDecisions(gmm_decoder.Decoder(), first_decoder_frame, 
-                &silence_frames);
-            first_decoder_frame = gmm_decoder.FeaturePipeline().NumFramesReady();
-            //for (const auto& p : silence_frames)
-            //{
-            //    std::cout << p.first << ", " << p.second << std::endl;
-            //}
-            std::cout<<"num sil decisions = " << silence_frames.size()<<std::endl;
-            feature_pipeline.NvectorFeature()->UpdateNvector(silence_frames);
-            feature_pipeline.NvectorFeature()->UpdateScalingParams(silence_frames);
-          }
           nnet3_decoder.AdvanceDecoding();
+          
+          //if (feature_pipeline.NvectorFeature() != NULL) {
+          //  silence_detection.GetSilenceDecisions(nnet3_decoder.Decoder(), first_decoder_frame, 
+          //      &silence_frames);
+          //  feature_pipeline.NvectorFeature()->UpdateNvector(silence_frames);
+          //  feature_pipeline.NvectorFeature()->UpdateScalingParams(silence_frames);
+          //}
+          
+          first_decoder_frame = nnet3_decoder.Decoder().NumFramesDecoded();
 
         }
-        gmm_decoder.FinalizeDecoding();
         nnet3_decoder.FinalizeDecoding();
 
         CompactLattice clat;
@@ -288,9 +256,7 @@ int main(int argc, char *argv[]) {
 
         // In an application you might avoid updating the adaptation state if
         // you felt the utterance had low confidence.  See lat/confidence.h
-        gmm_decoder.GetAdaptationState(&gmm_adaptation_state);
         feature_pipeline.GetAdaptationState(&adaptation_state);
-        feature_pipeline.GetCmvnState(&cmvn_state);
 
         // we want to output the lattice with un-scaled acoustics.
         BaseFloat inv_acoustic_scale =

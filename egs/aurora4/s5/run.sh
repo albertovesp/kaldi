@@ -5,12 +5,12 @@
 . ./path.sh
 
 stage=0
-train_set=multi # Set this to 'clean' or 'multi'
+train_set=clean # Set this to 'clean' or 'multi'
 test_sets="eval92 0166"
 train=true   # set to false to disable the training-related scripts
              # note: you probably only want to set --train false if you
              # are using at least --stage 1.
-decode=true  # set to false to disable the decoding-related scripts.
+decode=false  # set to false to disable the decoding-related scripts.
 
 . utils/parse_options.sh
 
@@ -41,7 +41,7 @@ if [ $stage -le 3 ]; then
   # Now make MFCC features.
   # mfccdir should be some place with a largish disk where you
   # want to store MFCC features.
-  for x in train_si84_clean train_si84_multi test_eval92 test_0166 dev_0330 dev_1206; do 
+  for x in train_si84_clean; do 
    steps/make_mfcc.sh  --nj 10 \
      data/$x exp/make_mfcc/$x $mfccdir || exit 1;
    steps/compute_cmvn_stats.sh data/$x exp/make_mfcc/$x $mfccdir || exit 1;

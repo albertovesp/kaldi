@@ -134,7 +134,7 @@ nnet3_affix=_cleaned
 
 # The rest are configs specific to this script.  Most of the parameters
 # are just hardcoded at this level, in the commands below.
-affix=1d
+affix=1a
 tree_affix=
 train_stage=-10
 get_egs_stage=-10
@@ -147,7 +147,7 @@ common_egs_dir=
 xent_regularize=0.1
 dropout_schedule='0,0@0.20,0.5@0.50,0'
 
-test_online_decoding=true  # if true, it will run the last decoding stage.
+test_online_decoding=false  # if true, it will run the last decoding stage.
 
 # End configuration section.
 echo "$0 $@"  # Print the command line for logging
@@ -179,7 +179,7 @@ ali_dir=exp/${gmm}_ali_${train_set}_sp
 tree_dir=exp/chain${nnet3_affix}/tree_sp${tree_affix:+_$tree_affix}
 lang=data/lang_chain
 lat_dir=exp/chain${nnet3_affix}/${gmm}_${train_set}_sp_lats
-dir=exp/chain${nnet3_affix}/tdnn${affix:+_$affix}_sp
+dir=exp/chain${nnet3_affix}/tdnn${affix:+_$affix}_comb
 train_data_dir=data/${train_set}_sp_hires
 lores_train_data_dir=data/${train_set}_sp
 train_ivector_dir=exp/nnet3${nnet3_affix}/ivectors_${train_set}_sp_hires

@@ -20,7 +20,7 @@
 
 #include "base/kaldi-common.h"
 #include "util/common-utils.h"
-#include "online2/online-nvector-feature.h"
+#include "ivector/online-noise-vector.h"
 
 namespace kaldi {
 
@@ -84,7 +84,9 @@ int main(int argc, char *argv[]) {
     ParseOptions po(usage);
 
     bool binary = true;
+    float scale = 1;
     po.Register("binary", &binary, "Write output in binary mode");
+    po.Register("scale", &scale, "Init value for r_s and r_n");
 
     po.Read(argc, argv);
 
@@ -126,11 +128,11 @@ int main(int argc, char *argv[]) {
 
     SpMatrix<BaseFloat> covariance(dim);
     ComputeCovarianceMatrix(utt2noise_vec, &covariance);
-    OnlineNvectorEstimationParams noise_prior;
-    noise_prior.EstimatePriorParameters(mean, covariance, dim);
+    OnlineNoisePrior noise_prior;
+    noise_prior.EstimatePriorParameters(mean, covariance, dim, scale);
 
     WriteKaldiObject(noise_prior, noise_prior_wxfilename, binary);
-    KALDI_LOG << "Wrote OnlineNvectorEstimationParams parameters to "
+    KALDI_LOG << "Wrote OnlineNoisePrior parameters to "
               << PrintableWxfilename(noise_prior_wxfilename);
     
     return 0;

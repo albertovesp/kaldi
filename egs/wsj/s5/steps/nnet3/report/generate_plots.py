@@ -165,11 +165,11 @@ def generate_acc_logprob_plots(exp_dir, output_dir, plot, key='accuracy',
     for dir in dirs:
         [report, times, data] = log_parse.generate_acc_logprob_report(dir, key,
                 output_name)
-        if index == 0:
+        #if index == 0:
             # this is the main experiment directory
-            with open("{0}/{1}.log".format(output_dir,
-                                           file_basename), "w") as f:
-                f.write(report)
+        with open("{0}/{1}.log".format(output_dir,
+                    file_basename+str(index)), "w") as f:
+            f.write(report)
 
         if plot:
             color_val = g_plot_colors[index]
@@ -757,7 +757,7 @@ def generate_plots(exp_dir, output_dir, output_names, comparison_dir=None,
                 file_basename='objective', comparison_dir=comparison_dir,
                 start_iter=start_iter,
                 latex_report=latex_report, output_name=output_name)
-
+    sys.exit(1)
     logger.info("Generating non-linearity stats plots")
     generate_nonlin_stats_plots(
         exp_dir, output_dir, g_plot, comparison_dir=comparison_dir,

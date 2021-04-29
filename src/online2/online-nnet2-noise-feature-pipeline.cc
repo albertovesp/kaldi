@@ -19,7 +19,6 @@
 // limitations under the License.
 
 #include "online2/online-nnet2-noise-feature-pipeline.h"
-#include "transform/cmvn.h"
 
 namespace kaldi {
 
@@ -51,15 +50,6 @@ OnlineNnet2NoiseFeaturePipelineInfo::OnlineNnet2NoiseFeaturePipelineInfo(
                  << "since you did not supply --add-pitch option.";
   }  // else use the defaults.
 
-  use_cmvn = (config.cmvn_config != "");
-  if (use_cmvn) {
-    ReadConfigFromFile(config.cmvn_config, &cmvn_opts);
-    global_cmvn_stats_rxfilename = config.global_cmvn_stats_rxfilename;
-    if (global_cmvn_stats_rxfilename == "")
-      KALDI_ERR << "--global-cmvn-stats option is required "
-                << " when --cmvn-config is specified.";
-  }
-  
   if (config.nvector_extraction_config != "") {
     use_nvectors = true;
     OnlineNvectorExtractionConfig nvector_extraction_opts;
@@ -81,9 +71,7 @@ OnlineNnet2NoiseFeaturePipeline::OnlineNnet2NoiseFeaturePipeline(
     const OnlineNnet2NoiseFeaturePipelineInfo &info):
     info_(info), base_feature_(NULL),
     pitch_(NULL), pitch_feature_(NULL),
-    cmvn_feature_(NULL),
     feature_plus_optional_pitch_(NULL),
-    feature_plus_optional_cmvn_(NULL),
     nvector_feature_(NULL),
     nnet3_feature_(NULL),
     final_feature_(NULL) {
@@ -108,33 +96,18 @@ OnlineNnet2NoiseFeaturePipeline::OnlineNnet2NoiseFeaturePipeline(
     feature_plus_optional_pitch_ = base_feature_;
   }
 
-  if (info_.use_cmvn) {
-    KALDI_ASSERT(info.global_cmvn_stats_rxfilename != "");
-    ReadKaldiObject(info.global_cmvn_stats_rxfilename, &global_cmvn_stats_);
-    OnlineCmvnState initial_state(global_cmvn_stats_);
-    cmvn_feature_ = new OnlineCmvn(info_.cmvn_opts, initial_state,
-        feature_plus_optional_pitch_);
-    feature_plus_optional_cmvn_ = cmvn_feature_;
-  } else {
-    feature_plus_optional_cmvn_ = feature_plus_optional_pitch_;
-  }
-
   if (info.use_nvectors) {
-    nnet3_feature_ = feature_plus_optional_cmvn_;
-    // Note: the noise vector extractor OnlineNvectorFeature gets 'base_feautre_'
-    // without cmvn (the online cmvn is applied inside the class)
+    nnet3_feature_ = feature_plus_optional_pitch_;
     nvector_feature_ = new OnlineNvectorFeature(info_.nvector_extraction_info,
                                                 base_feature_);
-    final_feature_ = new OnlineAppendFeature(feature_plus_optional_cmvn_,
+    final_feature_ = new OnlineAppendFeature(feature_plus_optional_pitch_,
                                              nvector_feature_);
   } else {
-    nnet3_feature_ = feature_plus_optional_cmvn_;
-    final_feature_ = feature_plus_optional_cmvn_;
+    nnet3_feature_ = feature_plus_optional_pitch_;
+    final_feature_ = feature_plus_optional_pitch_;
   }
   dim_ = final_feature_->Dim();
 }
-/// ^-^
-
 
 int32 OnlineNnet2NoiseFeaturePipeline::Dim() const { return dim_; }
 
@@ -167,31 +140,14 @@ void OnlineNnet2NoiseFeaturePipeline::GetAdaptationState(
   // else silently do nothing, as there is nothing to do.
 }
 
-void OnlineNnet2NoiseFeaturePipeline::SetCmvnState(
-    const OnlineCmvnState &cmvn_state) {
-  if (NULL != cmvn_feature_)
-    cmvn_feature_->SetState(cmvn_state);
-}
-
-void OnlineNnet2NoiseFeaturePipeline::GetCmvnState(
-    OnlineCmvnState *cmvn_state) {
-  if (NULL != cmvn_feature_) {
-    int32 frame = cmvn_feature_->NumFramesReady() - 1;
-    // the following call will crash if no frames are ready.
-    cmvn_feature_->GetState(frame, cmvn_state);
-  }
-}
-
-
 OnlineNnet2NoiseFeaturePipeline::~OnlineNnet2NoiseFeaturePipeline() {
   // Note: the delete command only deletes pointers that are non-NULL.  Not all
   // of the pointers below will be non-NULL.
   // Some of the online-feature pointers are just copies of other pointers,
   // and we do have to avoid deleting them in those cases.
-  if (final_feature_ != feature_plus_optional_cmvn_)
+  if (final_feature_ != feature_plus_optional_pitch_)
     delete final_feature_;
   delete nvector_feature_;
-  delete cmvn_feature_;
   if (feature_plus_optional_pitch_ != base_feature_)
     delete feature_plus_optional_pitch_;
   delete pitch_feature_;

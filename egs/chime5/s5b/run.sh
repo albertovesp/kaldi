@@ -9,13 +9,14 @@
 # Begin configuration section.
 nj=96
 decode_nj=20
+gss_nj=50
 stage=0
 nnet_stage=-10
 num_data_reps=4
 snrs="20:10:15:5:0"
 foreground_snrs="20:10:15:5:0"
 background_snrs="20:10:15:5:0"
-enhancement=beamformit # for a new enhancement method,
+enhancement=gss # for a new enhancement method,
                        # change this variable and stage 4
 # End configuration section
 . ./utils/parse_options.sh
@@ -33,8 +34,8 @@ json_dir=${chime5_corpus}/transcriptions
 audio_dir=${chime5_corpus}/audio
 
 # training and test data
-train_set=train_worn_simu_u400k
-test_sets="dev_${enhancement}_dereverb_ref" #"dev_worn dev_addition_dereverb_ref"
+train_set=train_worn_u400k
+test_sets="dev_${enhancement}_dereverb_ref dev_worn eval_${enhancement}_dereverb_ref"
 #test_sets="dev_${enhancement}_ref" #"dev_worn dev_addition_dereverb_ref"
 
 # This script also needs the phonetisaurus g2p, srilm, beamformit
@@ -45,13 +46,6 @@ if [ $stage -le 1 ]; then
   for mictype in worn u01 u02 u04 u05 u06; do
     local/prepare_data.sh --mictype ${mictype} \
 			  ${audio_dir}/train ${json_dir}/train data/train_${mictype}
-  done
-  for dataset in dev; do
-    for mictype in worn; do
-      local/prepare_data.sh --mictype ${mictype} \
-			    ${audio_dir}/${dataset} ${json_dir}/${dataset} \
-			    data/${dataset}_${mictype}
-    done
   done
 fi
 
@@ -75,35 +69,45 @@ if [ $stage -le 3 ]; then
 
 fi
 
-if [ $stage -le 4 ]; then
-  # Beamforming using reference arrays
-  # enhanced WAV directory
-  enhandir=enhan
-  dereverb_dir=${PWD}/wav/wpe/
+if [ $stage -le 4 ] && [[ ${enhancement} == *gss* ]]; then
+  echo "$0:  enhance data..."
+  # Guided Source Separation (GSS) from Paderborn University
+  # http://spandh.dcs.shef.ac.uk/chime_workshop/papers/CHiME_2018_paper_boeddecker.pdf
+  # @Article{PB2018CHiME5,
+  #   author    = {Boeddeker, Christoph and Heitkaemper, Jens and Schmalenstroeer, Joerg and Drude, Lukas and Heymann, Jahn and Haeb-Umbach, Reinhold},
+  #   title     = {{Front-End Processing for the CHiME-5 Dinner Party Scenario}},
+  #   year      = {2018},
+  #   booktitle = {CHiME5 Workshop},
+  # }
+
+  if [ ! -d pb_chime5/ ]; then
+    local/install_pb_chime5.sh
+  fi
+
+  if [ ! -f pb_chime5/cache/chime5.json ]; then
+    (
+    cd pb_chime5
+    miniconda_dir=$HOME/miniconda3/
+    export PATH=$miniconda_dir/bin:$PATH
+    export CHIME5_DIR=$chime5_corpus
+    make cache/chime5.json
+    )
+  fi
+
   for dset in dev eval; do
-    for mictype in u01 u02 u03 u04 u06; do
-      local/run_wpe.sh --nj 4 --cmd "$train_cmd --mem 120G" \
-			      ${audio_dir}/${dset} \
-			      ${dereverb_dir}/${dset} \
-			      ${mictype}
-    done
+    local/run_gss.sh \
+      --cmd "$train_cmd --max-jobs-run $gss_nj" --nj 160 \
+      ${dset} \
+      ${enhanced_dir} \
+      ${enhanced_dir} || exit 1
   done
 
   for dset in dev eval; do
-    for mictype in u01 u02 u03 u04 u06; do
-      local/run_beamformit.sh --cmd "$train_cmd" \
-			      ${dereverb_dir}/${dset} \
-			      ${enhandir}/${dset}_${enhancement}_${mictype} \
-			      ${mictype}
-    done
-  done
-
-  for dset in dev eval; do
-    local/prepare_data.sh --mictype ref "$PWD/${enhandir}/${dset}_${enhancement}_u0*" \
-			  ${json_dir}/${dset} data/${dset}_${enhancement}_dereverb_ref
+    local/prepare_data.sh --mictype gss ${enhanced_dir}/audio/${dset} \
+      ${json_dir}/${dset} data/${dset}_${enhancement} || exit 1
   done
 fi
-
+exit 1
 if [ $stage -le 5 ]; then
   # remove possibly bad sessions (P11_S03, P52_S19, P53_S24, P54_S24)
   # see http://spandh.dcs.shef.ac.uk/chime_challenge/data.html for more details
@@ -150,11 +154,11 @@ if [ $stage -le 7 ]; then
   # if you want to include more training data, you can increase the number of array mic utterances
   utils/combine_data.sh data/train_uall data/train_u01 data/train_u02 data/train_u04 data/train_u05 data/train_u06
   utils/subset_data_dir.sh data/train_uall 400000 data/train_u400k
-  utils/combine_data.sh data/${train_set} data/train_worn data/train_worn_rvb data/train_u400k
+  utils/combine_data.sh data/${train_set} data/train_worn data/train_u400k
 
   # only use left channel for worn mic recognition
   # you can use both left and right channels for training
-  for dset in train dev; do
+  for dset in dev eval; do
     utils/copy_data_dir.sh data/${dset}_worn data/${dset}_worn_stereo
     grep "\.L-" data/${dset}_worn_stereo/text > data/${dset}_worn/text
     utils/fix_data_dir.sh data/${dset}_worn
@@ -267,13 +271,13 @@ fi
 
 if [ $stage -le 17 ]; then
   # chain TDNN
-  local/chain/tuning/run_tdnn_1b.sh --nj ${nj} \
+  local/chain/tuning/run_tdnn_1c.sh --nj ${nj} \
     --stage $nnet_stage \
     --train-set ${train_set}_cleaned \
     --test-sets "$test_sets" \
     --gmm tri3_cleaned --nnet3-affix _${train_set}_cleaned_rvb
 fi
-
+exit 1
 if [ $stage -le 18 ]; then
   # 2-stage decoding
   for test_set in $test_sets; do

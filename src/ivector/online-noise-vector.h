@@ -38,8 +38,7 @@ class OnlineNoisePrior {
  friend class OnlineNoiseVector;
 
  public:
-  OnlineNoisePrior():
-    r_s_(1), r_n_(1) { }
+  OnlineNoisePrior() { }
 
   explicit OnlineNoisePrior(const OnlineNoisePrior &other):
     mu_n_(other.mu_n_),
@@ -47,8 +46,8 @@ class OnlineNoisePrior {
     B_(other.B_),
     Lambda_n_(other.Lambda_n_),
     Lambda_s_(other.Lambda_s_),
-    r_s_(1),
-    r_n_(1) {
+    r_s_(other.r_s_),
+    r_n_(other.r_n_) {
   };
 
   OnlineNoisePrior &operator = (const OnlineNoisePrior &other) {
@@ -61,8 +60,15 @@ class OnlineNoisePrior {
   /// training data and estimates the prior parameters.
   void EstimatePriorParameters(const VectorBase<BaseFloat> &mean,
                                const SpMatrix<BaseFloat> &covariance,
-                               int32 dim);
+                               int32 dim, float scale);
 
+  void EstimatePriorParameters(const VectorBase<BaseFloat> &mean,
+                               const SpMatrix<BaseFloat> &covariance,
+                               int32 dim,
+                               Matrix<BaseFloat> &speech_var_sum,
+                               Matrix<BaseFloat> &noise_var_sum,
+                               int32 num_speech, int32 num_noise);
+  
   void Write(std::ostream &os, bool binary) const;
   void Read(std::istream &is, bool binary);
 
@@ -134,6 +140,14 @@ class OnlineNoiseVector {
 
   // This is the current estimate of the noise vector
   Vector<BaseFloat> current_vector_;
+
+  // Online statistic estimate
+  int32 num_speech_;
+  int32 num_noise_;
+  Vector<BaseFloat> speech_sum_;
+  Vector<BaseFloat> noise_sum_;
+  Matrix<BaseFloat> speech_var_;
+  Matrix<BaseFloat> noise_var_;
 };
 
 

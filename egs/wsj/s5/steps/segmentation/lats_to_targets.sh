@@ -21,7 +21,9 @@ set -o pipefail
 silence_phones=
 garbage_phones=
 max_phone_duration=0.5
+randomness=0.0
 acwt=0.1
+frame_subsampling_factor=1
 
 cmd=run.pl
 
@@ -110,9 +112,8 @@ $cmd JOB=1:$nj $dir/log/get_arc_info.JOB.log \
 # make $dir an absolute pathname.
 dir=`perl -e '($dir,$pwd)= @ARGV; if($dir!~m:^/:) { $dir = "$pwd/$dir"; } print $dir; ' $dir ${PWD}`
 
-frame_subsampling_factor=1
 if [ -f $srcdir/frame_subsampling_factor ]; then
-  frame_subsampling_factor=$(cat $srcdir/frames_subsampling_factor)
+  frame_subsampling_factor=$(cat $srcdir/frame_subsampling_factor)
   echo $frame_subsampling_factor > $dir/frame_subsampling_factor
 fi
 

@@ -136,6 +136,14 @@ void OnlineNvectorFeature::SetAdaptationState(
   this->nvector_stats_.Lambda_s_ = adaptation_state.Lambda_s_;
   this->nvector_stats_.r_s_ = adaptation_state.r_s_;
   this->nvector_stats_.r_n_ = adaptation_state.r_n_;
+
+  int32 dim = adaptation_state.mu_n_.Dim();
+  SubVector<BaseFloat> mu_s(this->current_nvector_, 0, dim);
+  SubVector<BaseFloat> mu_n(this->current_nvector_, dim, dim);
+  mu_n.AddVec(1.0, this->nvector_stats_.mu_n_);
+  mu_s.AddVec(1.0, this->nvector_stats_.a_);
+  mu_s.AddMatVec(1.0, this->nvector_stats_.B_, kNoTrans, mu_n, 1.0);
+  this->nvectors_history_.push_back(new Vector<BaseFloat>(this->current_nvector_));
 }
 
 void OnlineNvectorFeature::UpdateNvector(
@@ -204,19 +212,12 @@ void OnlineNvectorFeature::UpdateNvector(
   K.Invert();
   current_nvector_.AddMatVec(1.0, K, kNoTrans, Q, 0.0);
   nvectors_history_.push_back(new Vector<BaseFloat>(current_nvector_));
-  for (int32 i = 0; i < current_nvector_.Dim(); i++) {
-    std::cout << current_nvector_(i) << ' ';
-  }
-  std::cout << std::endl;
 }
 
 void OnlineNvectorFeature::GetFrame(int32 frame,
                                     VectorBase<BaseFloat> *feat) {
   KALDI_ASSERT(feat->Dim() == this->Dim());
-
-	int32 i = frame / info_.nvector_period;  // rounds down.
-	KALDI_ASSERT(static_cast<size_t>(i) <  nvectors_history_.size());
-	feat->CopyFromVec(*(nvectors_history_[i]));
+	feat->CopyFromVec(current_nvector_);
 }
 
 void OnlineNvectorFeature::UpdateScalingParams(
@@ -280,8 +281,9 @@ OnlineSilenceDetection::OnlineSilenceDetection(
   }
 }
 
+template <typename FST>
 void OnlineSilenceDetection::GetSilenceDecisions(
-    const LatticeFasterOnlineDecoder &decoder,
+    const LatticeFasterOnlineDecoderTpl<FST> &decoder,
     int32 first_decoder_frame, std::vector<std::pair<int32, bool> > *silence_frames) {
   
   int32 num_frames_decoded = decoder.NumFramesDecoded(),
@@ -294,11 +296,11 @@ void OnlineSilenceDetection::GetSilenceDecisions(
   
   if (num_frames_decoded == 0)
     return;
-  int32 frame = num_frames_decoded - 1;
+  int32 frame = num_frames_decoded - 1; 
   bool use_final_probs = false;
-  typename LatticeFasterOnlineDecoder::BestPathIterator iter =
+  typename LatticeFasterOnlineDecoderTpl<FST>::BestPathIterator iter =
       decoder.BestPathEnd(use_final_probs, NULL);
-  while (frame >= first_decoder_frame) {
+  while (frame >= 0) {
     LatticeArc arc;
     arc.ilabel = 0;
     while (arc.ilabel == 0)  // the while loop skips over input-epsilons
@@ -332,8 +334,9 @@ void OnlineSilenceDetection::GetSilenceDecisions(
   // for transition-ids that repeat with duration > max_state_duration.
 
   // First treat some special cases.
-  if (frames_out == 0)  // Nothing to output.
+  if (frames_out == 0) {  // Nothing to output.
     return;
+  }
   if (frame_info_[begin_frame].transition_id == -1) {
     // We do not have any traceback at all within the frames we are to output...
     bool decision = (begin_frame == 0 ? true :
@@ -384,6 +387,20 @@ void OnlineSilenceDetection::GetSilenceDecisions(
       silence_frames->push_back(std::make_pair(input_frame, frame_decisions[frame]));
     }
   }
+}
+
+// Instantiate the template OnlineSilenceDetection::GetSilenceDecisions().
+template
+void OnlineSilenceDetection::GetSilenceDecisions<fst::Fst<fst::StdArc> >(
+    const LatticeFasterOnlineDecoderTpl<fst::Fst<fst::StdArc> > &decoder,
+    int32 first_decoder_frame, std::vector<std::pair<int32, bool> > *silence_frames);
+template
+void OnlineSilenceDetection::GetSilenceDecisions<fst::GrammarFst>(
+    const LatticeFasterOnlineDecoderTpl<fst::GrammarFst> &decoder,
+    int32 first_decoder_frame, std::vector<std::pair<int32, bool> > *silence_frames);
+
+void OnlineSilenceDetection::ClearFrameInfo() {
+  frame_info_.clear();
 }
 
 }  // namespace kaldi

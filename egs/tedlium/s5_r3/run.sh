@@ -83,7 +83,7 @@ if [ $stage -le 6 ]; then
     steps/compute_cmvn_stats.sh $dir
   done
 fi
-
+exit 1
 # Now we have 452 hours of training data.
 # Well create a subset with 10k short segments to make flat-start training easier:
 if [ $stage -le 7 ]; then

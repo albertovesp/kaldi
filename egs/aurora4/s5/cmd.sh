@@ -10,9 +10,9 @@
 # conf/queue.conf in http://kaldi-asr.org/doc/queue.html for more information,
 # or search for the string 'default_config' in utils/queue.pl or utils/slurm.pl.
 
-export train_cmd="queue.pl --mem 4G"
-export decode_cmd="queue.pl --mem 4G"
-export mkgraph_cmd="queue.pl --mem 8G"
+export train_cmd="queue.pl --mem 2G -l 'hostname=!b02*'"
+export decode_cmd="queue.pl --mem 4G -l 'hostname=!b02*&!c27*'"
+export mkgraph_cmd="queue.pl --mem 8G -l 'hostname=b1*\|c1*'"
 # the use of cuda_cmd is deprecated but it's still used in some example scripts
 # here.
-export cuda_cmd="queue.pl --gpu 1"
+export cuda_cmd="queue.pl --gpu 1 -l 'hostname=b1*\|c1*'"

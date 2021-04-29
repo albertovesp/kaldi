@@ -4,7 +4,7 @@
 # Set this to somewhere where you want to put your data, or where
 # someone else has already put it.  You'll want to change this
 # if you're not on the CLSP grid.
-data=/export/a15/vpanayotov/data
+data=/export/corpora5/
 
 # base url for downloads.
 data_url=www.openslr.org/resources/12
@@ -184,7 +184,7 @@ if [ $stage -le 14 ] && false; then
 fi
 
 if [ $stage -le 15 ]; then
-  local/download_and_untar.sh $data $data_url train-clean-360
+  # local/download_and_untar.sh $data $data_url train-clean-360
 
   # now add the "clean-360" subset to the mix ...
   local/data_prep.sh \
@@ -195,8 +195,8 @@ if [ $stage -le 15 ]; then
     data/train_clean_360 exp/make_mfcc/train_clean_360 $mfccdir
 
   # ... and then combine the two sets into a 460 hour one
-  utils/combine_data.sh \
-    data/train_clean_460 data/train_clean_100 data/train_clean_360
+  # utils/combine_data.sh \
+  #   data/train_clean_460 data/train_clean_100 data/train_clean_360
 fi
 
 if [ $stage -le 16 ]; then
@@ -217,7 +217,7 @@ fi
 
 if [ $stage -le 17 ]; then
   # prepare the remaining 500 hours of data
-  local/download_and_untar.sh $data $data_url train-other-500
+  # local/download_and_untar.sh $data $data_url train-other-500
 
   # prepare the 500 hour subset.
   local/data_prep.sh \
@@ -228,8 +228,8 @@ if [ $stage -le 17 ]; then
     data/train_other_500 exp/make_mfcc/train_other_500 $mfccdir
 
   # combine all the data
-  utils/combine_data.sh \
-    data/train_960 data/train_clean_460 data/train_other_500
+  # utils/combine_data.sh \
+  #   data/train_960 data/train_clean_460 data/train_other_500
 fi
 
 if [ $stage -le 18 ]; then
@@ -285,7 +285,7 @@ fi
 #     --rnnlm-options "-hidden 150 -direct 400 -direct-order 3 --nce 20" \
 #     --rnnlm-tag "h150-me3-400-nce20" $data data/local/lm
 
-
+exit 1
 if [ $stage -le 20 ]; then
   # train and test nnet3 tdnn models on the entire data with data-cleaning.
   local/chain/run_tdnn.sh # set "--stage 11" if you have already run local/nnet3/run_tdnn.sh

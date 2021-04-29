@@ -83,5 +83,4 @@ if [ ! -z "$min_seg_len" ]; then
   fi
 fi
 
-
 exit 0;

@@ -36,7 +36,7 @@ num_processes_extractor=2
 nnet3_affix=       # affix for exp dirs, e.g. it was _cleaned in tedlium.
 
 # Options which are not passed through to run_ivector_common.sh
-affix=1a   #affix for TDNN+LSTM directory e.g. "1a" or "1b", in case we change the configuration.
+affix=1a4   #affix for TDNN+LSTM directory e.g. "1a" or "1b", in case we change the configuration.
 common_egs_dir=
 reporting_email=
 
@@ -75,7 +75,7 @@ where "nvcc" is installed.
 EOF
 fi
 
-local/nnet3/run_ivector_common.sh \
+local/nnet3/run_ivector_common_offline.sh \
   --stage $stage --nj $nj \
   --train-set $train_set --gmm $gmm \
   --test-sets $test_sets \
@@ -90,7 +90,7 @@ ali_dir=exp/${gmm}_ali_${train_set}_sp
 lat_dir=exp/chain${nnet3_affix}/${gmm}_${train_set}_sp_lats
 dir=exp/chain${nnet3_affix}/tdnn${affix}_sp
 train_data_dir=data/${train_set}_sp_hires
-train_ivector_dir=exp/nnet3${nnet3_affix}/ivectors_${train_set}_sp_hires
+train_ivector_dir=exp/nnet3${nnet3_affix}/ivectors_${train_set}_sp_hires_lda
 lores_train_data_dir=data/${train_set}_sp
 
 # note: you don't necessarily have to change the treedir name
@@ -170,15 +170,16 @@ if [ $stage -le 12 ]; then
 
   mkdir -p $dir/configs
   cat <<EOF > $dir/configs/network.xconfig
-  input dim=100 name=ivector
+  input dim=50 name=ivector
   input dim=40 name=input
 
-  idct-layer name=idct input=input dim=40 cepstral-lifter=22 affine-transform-file=$dir/configs/idct.mat
-  delta-layer name=delta input=idct
-  no-op-component name=input2 input=Append(delta, Scale(1.0, ReplaceIndex(ivector, t, 0)))
+  #idct-layer name=idct input=input dim=40 cepstral-lifter=22 affine-transform-file=$dir/configs/idct.mat
+  #delta-layer name=delta input=idct
+  #no-op-component name=input2 input=Append(delta, Scale(1.0, ReplaceIndex(ivector, t, 0)))
+  fixed-affine-layer name=lda input=Append(-1,0,1,ReplaceIndex(ivector, t, 0)) affine-transform-file=$dir/configs/lda.mat
 
   # the first splicing is moved before the lda layer, so no splicing here
-  relu-batchnorm-layer name=tdnn1 $tdnn_opts dim=1024 input=input2
+  relu-batchnorm-layer name=tdnn1 $tdnn_opts dim=1024 input=lda
   tdnnf-layer name=tdnnf2 $tdnnf_opts dim=1024 bottleneck-dim=128 time-stride=1
   tdnnf-layer name=tdnnf3 $tdnnf_opts dim=1024 bottleneck-dim=128 time-stride=1
   tdnnf-layer name=tdnnf4 $tdnnf_opts dim=1024 bottleneck-dim=128 time-stride=1
@@ -276,7 +277,7 @@ if [ $stage -le 15 ]; then
         --extra-right-context-final 0 \
         --frames-per-chunk $frames_per_chunk \
         --nj $nspk --cmd "$decode_cmd"  --num-threads 4 \
-        --online-ivector-dir exp/nnet3${nnet3_affix}/ivectors_test_${data}_hires \
+        --online-ivector-dir exp/nnet3${nnet3_affix}/ivectors_test_${data}_hires_lda \
         $tree_dir/graph_${lmtype} data/test_${data}_hires ${dir}/decode_${lmtype}_${data_affix} || exit 1
     done
   done

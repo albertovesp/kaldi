@@ -8,7 +8,7 @@ transform_dir=   # this option won't normally be used, but it can be used if you
                  # supply existing fMLLR transforms when decoding.
 iter=
 model= # You can specify the model to use (e.g. if you want to use the .alimdl)
-stage=1
+stage=0
 nj=4
 cmd=run.pl
 max_active=7000

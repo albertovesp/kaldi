@@ -231,31 +231,31 @@ fi
 
 if [ $stage -le 14 ]; then
   # Train tri4, which is LDA+MLLT+SAT, on all the (nodup) data.
-  steps/align_fmllr.sh --nj 30 --cmd "$train_cmd" \
-                       data/train_nodup data/lang exp/tri3 exp/tri3_ali_nodup
+  # steps/align_fmllr.sh --nj 30 --cmd "$train_cmd" \
+  #                      data/train_nodup data/lang exp/tri3 exp/tri3_ali_nodup
 
 
-  steps/train_sat.sh  --cmd "$train_cmd" \
-                      11500 200000 data/train_nodup data/lang exp/tri3_ali_nodup exp/tri4
+  # steps/train_sat.sh  --cmd "$train_cmd" \
+  #                     11500 200000 data/train_nodup data/lang exp/tri3_ali_nodup exp/tri4
 
-  (
+  # (
     graph_dir=exp/tri4/graph_sw1_tg
     $train_cmd $graph_dir/mkgraph.log \
                utils/mkgraph.sh data/lang_sw1_tg exp/tri4 $graph_dir
-    steps/decode_fmllr.sh --nj 30 --cmd "$decode_cmd" \
-                          --config conf/decode.config \
-                          $graph_dir data/eval2000 exp/tri4/decode_eval2000_sw1_tg
+    # steps/decode_fmllr.sh --nj 30 --cmd "$decode_cmd" \
+    #                       --config conf/decode.config \
+    #                       $graph_dir data/eval2000 exp/tri4/decode_eval2000_sw1_tg
     # Will be used for confidence calibration example,
-    steps/decode_fmllr.sh --nj 30 --cmd "$decode_cmd" \
-                          $graph_dir data/train_dev exp/tri4/decode_dev_sw1_tg
-    if $has_fisher; then
-      steps/lmrescore_const_arpa.sh --cmd "$decode_cmd" \
-        data/lang_sw1_{tg,fsh_fg} data/eval2000 \
-        exp/tri4/decode_eval2000_sw1_{tg,fsh_fg}
-    fi
-  ) &
+    # steps/decode_fmllr.sh --nj 30 --cmd "$decode_cmd" \
+    #                       $graph_dir data/train_dev exp/tri4/decode_dev_sw1_tg
+    # if $has_fisher; then
+    #   steps/lmrescore_const_arpa.sh --cmd "$decode_cmd" \
+    #     data/lang_sw1_{tg,fsh_fg} data/eval2000 \
+    #     exp/tri4/decode_eval2000_sw1_{tg,fsh_fg}
+    # fi
+  # ) &
 fi
-
+exit 1
 if ! $train_discriminative; then
   echo "$0: exiting early since --train-discriminative is false."
   exit 0

@@ -61,7 +61,6 @@ fi
 local/nnet3/run_ivector_common.sh --stage $stage \
                                   --mic $mic \
                                   --nj $nj \
-                                  --hires_suffix 80 \
                                   --min-seg-len $min_seg_len \
                                   --train-set $train_set \
                                   --gmm $gmm \
@@ -181,7 +180,7 @@ if [ $stage -le 15 ]; then
   mkdir -p $dir/configs
   cat <<EOF > $dir/configs/network.xconfig
   input dim=100 name=ivector
-  input dim=80 name=input
+  input dim=40 name=input
 
   # please note that it is important to have input layer with the name=input
   # as the layer immediately preceding the fixed-affine-layer to enable

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 stage=0
-train=true   # set to false to disable the training-related scripts
+train=false   # set to false to disable the training-related scripts
              # note: you probably only want to set --train false if you
              # are using at least --stage 1.
 decode=true  # set to false to disable the decoding-related scripts.
@@ -30,7 +30,7 @@ wsj1=/export/corpora5/LDC/LDC94S13B
 if [ $stage -le 0 ]; then
   # data preparation.
   local/wsj_data_prep.sh $wsj0/??-{?,??}.? $wsj1/??-{?,??}.?  || exit 1;
-
+  
   # Sometimes, we have seen WSJ distributions that do not have subdirectories
   # like '11-13.1', but instead have 'doc', 'si_et_05', etc. directly under the
   # wsj0 or wsj1 directories. In such cases, try the following:
@@ -71,20 +71,19 @@ if [ $stage -le 0 ]; then
   # mfccdir should be some place with a largish disk where you
   # want to store MFCC features.
 
-  for x in test_eval92 test_eval93 test_dev93 train_si284; do
-    steps/make_mfcc.sh --cmd "$train_cmd" --nj 20 data/$x || exit 1;
-    steps/compute_cmvn_stats.sh data/$x || exit 1;
-  done
+  #for x in test_eval92 test_dev93; do
+  #  steps/make_mfcc.sh --cmd "$train_cmd" --nj 20 data/$x || exit 1;
+  #  steps/compute_cmvn_stats.sh data/$x || exit 1;
+  #done
 
-  utils/subset_data_dir.sh --first data/train_si284 7138 data/train_si84 || exit 1
+  #utils/subset_data_dir.sh --first data/train_si284 7138 data/train_si84 || exit 1
 
   # Now make subset with the shortest 2k utterances from si-84.
-  utils/subset_data_dir.sh --shortest data/train_si84 2000 data/train_si84_2kshort || exit 1;
+ # utils/subset_data_dir.sh --shortest data/train_si84 2000 data/train_si84_2kshort || exit 1;
 
   # Now make subset with half of the data from si-84.
-  utils/subset_data_dir.sh data/train_si84 3500 data/train_si84_half || exit 1;
+  #utils/subset_data_dir.sh data/train_si84 3500 data/train_si84_half || exit 1;
 fi
-
 
 if [ $stage -le 1 ]; then
   # monophone

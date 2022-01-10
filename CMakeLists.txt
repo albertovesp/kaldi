@@ -6,8 +6,13 @@ include(GNUInstallDirs)
 include(Utils)
 include(third_party/get_third_party)
 
+find_package(PythonInterp)
+if(NOT PYTHON_EXECUTABLE)
+    message(FATAL_ERROR "Needs python to auto-generate most CMake files, but not found.")
+endif()
+
 message(STATUS "Running gen_cmake_skeleton.py")
-execute_process(COMMAND python
+execute_process(COMMAND ${PYTHON_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/gen_cmake_skeleton.py"
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "--quiet"
@@ -28,10 +33,20 @@ if(BUILD_SHARED_LIBS)
     endif()
 endif()
 
-set(MATHLIB "OpenBLAS" CACHE STRING "OpenBLAS|MKL|Accelerate")
+if(APPLE)
+    # Use built-in BLAS on MacOS by default.
+    set(MATHLIB "Accelerate" CACHE STRING "OpenBLAS|MKL|Accelerate")
+else()
+    set(MATHLIB "OpenBLAS" CACHE STRING "OpenBLAS|MKL|Accelerate")
+endif()
 option(KALDI_BUILD_EXE "If disabled, will make add_kaldi_executable a no-op" ON)
 option(KALDI_BUILD_TEST "If disabled, will make add_kaldi_test_executable a no-op" ON)
 option(KALDI_USE_PATCH_NUMBER "Use MAJOR.MINOR.PATCH format, otherwise MAJOR.MINOR" OFF)
+
+if (KALDI_BUILD_TEST)
+    include(CTest)
+    enable_testing()
+endif()
 
 link_libraries(${CMAKE_DL_LIBS})
 
@@ -45,14 +60,31 @@ if(MATHLIB STREQUAL "OpenBLAS")
     include_directories(${CMAKE_CURRENT_SOURCE_DIR}/tools/CLAPACK)
     link_libraries(${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
 elseif(MATHLIB STREQUAL "MKL")
-    set(BLA_VENDOR "Intel10_64lp")
-    # find_package(BLAS REQUIRED)
+    if(NOT DEFINED ENV{MKLROOT} OR "$ENV{MKLROOT}" STREQUAL "")
+        message(FATAL_ERROR "Environment variable MKLROOT is not defined")
+    else()
+        message(STATUS "Finding MKL from \"$ENV{MKLROOT}\"")
+    endif()
     normalize_env_path(ENV{MKLROOT})
+    set(BLA_VENDOR "Intel10_64lp_seq") # use the single threaded MKL by default
     find_package(LAPACK REQUIRED)
     add_definitions(-DHAVE_MKL=1)
-    include_directories($ENV{MKLROOT}/include) # TODO: maybe not use env, idk, find_package doesnt handle includes...
+    include_directories($ENV{MKLROOT}/include)
     link_libraries(${BLAS_LIBRARIES} ${LAPACK_LIBRARIES})
 elseif(MATHLIB STREQUAL "Accelerate")
+    execute_process(COMMAND sw_vers -productVersion
+        OUTPUT_VARIABLE MACOS_VERSION)
+    if(MACOS_VERSION VERSION_LESS "10.12" AND MACOS_VERSION VERSION_GREATER_EQUAL "10.11")
+        message(WARNING
+            "**BAD WARNING**: You are using OS X El Capitan.  Some versions of this OS"
+            " have a bug in the BLAS implementation that affects Kaldi."
+            " After compiling, cd to matrix/ and type 'make test'.  The"
+            " test will fail if the problem exists in your version."
+            " Eventually this issue will be fixed by system updates from"
+            " Apple.  Unexplained crashes with reports of NaNs will"
+            " be caused by this bug, but some recipes will (sometimes) work."
+        )
+    endif()
     set(BLA_VENDOR "Apple")
     find_package(BLAS REQUIRED)
     find_package(LAPACK REQUIRED)
@@ -82,8 +114,6 @@ endif()
 
 find_package(CUDA)
 if(CUDA_FOUND)
-    set(CUB_ROOT_DIR "${PROJECT_SOURCE_DIR}/tools/cub")
-
     set(CUDA_PROPAGATE_HOST_FLAGS ON)
     set(KALDI_CUDA_NVCC_FLAGS "--default-stream=per-thread;-std=c++${CMAKE_CXX_STANDARD}")
     if(MSVC)
@@ -115,6 +145,8 @@ if(CUDA_FOUND)
     include_directories(${NvToolExt_INCLUDE_DIR})
     link_libraries(${NvToolExt_LIBRARIES})
 
+    get_third_party(cub)
+    set(CUB_ROOT_DIR "${CMAKE_BINARY_DIR}/cub")
     find_package(CUB REQUIRED)
     include_directories(${CUB_INCLUDE_DIR})
 endif()
@@ -128,7 +160,7 @@ if(${KALDI_USE_PATCH_NUMBER})
 endif()
 
 get_third_party(openfst)
-set(OPENFST_ROOT_DIR ${CMAKE_CURRENT_BINARY_DIR}/openfst)
+set(OPENFST_ROOT_DIR ${CMAKE_BINARY_DIR}/openfst)
 include(third_party/openfst_lib_target)
 link_libraries(fst)
 
@@ -160,6 +192,11 @@ add_subdirectory(src/kws)
 
 add_subdirectory(src/itf)
 
+if(TENSORFLOW_DIR)
+    add_subdirectory(src/tfrnnlm)
+    add_subdirectory(src/tfrnnlmbin)
+endif()
+
 # add all cuda libraries
 if(CUDA_FOUND)
     add_subdirectory(src/cudafeat)
@@ -167,9 +204,22 @@ if(CUDA_FOUND)
 endif()
 
 # add all native executables
+add_subdirectory(src/bin)
 add_subdirectory(src/gmmbin)
 add_subdirectory(src/featbin)
+add_subdirectory(src/sgmm2bin)
+add_subdirectory(src/fstbin)
+add_subdirectory(src/lmbin)
+add_subdirectory(src/latbin)
+add_subdirectory(src/nnetbin)
+add_subdirectory(src/nnet2bin)
+add_subdirectory(src/nnet3bin)
+add_subdirectory(src/rnnlmbin)
+add_subdirectory(src/chainbin)
+add_subdirectory(src/ivectorbin)
 add_subdirectory(src/onlinebin)
+add_subdirectory(src/online2bin)
+add_subdirectory(src/kwsbin)
 
 # add all cuda executables
 if(CUDA_FOUND)

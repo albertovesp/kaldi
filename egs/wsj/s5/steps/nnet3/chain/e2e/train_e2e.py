@@ -271,7 +271,7 @@ def train(args, run_opts):
 
     # split the training data into parts for individual jobs
     # we will use the same number of jobs as that used for compiling FSTs
-    common_lib.execute_command("utils/split_data.sh {0} {1} || exit 1;".format(
+    common_lib.execute_command("utils/split_data.sh {0} {1}".format(
             args.feat_dir, num_jobs))
     shutil.copy('{0}/tree'.format(args.tree_dir), args.dir)
     shutil.copy('{0}/phones.txt'.format(args.tree_dir), args.dir)
@@ -341,7 +341,7 @@ def train(args, run_opts):
                     --frames-per-iter {frames_per_iter} \
                     --srand {srand} \
                     {data} {dir} {fst_dir} {egs_dir}""".format(
-                        command=run_opts.command,
+                        command=run_opts.egs_command,
                         cmvn_opts=args.cmvn_opts if args.cmvn_opts is not None else '',
                         ivector_dir=(args.online_ivector_dir
                                      if args.online_ivector_dir is not None

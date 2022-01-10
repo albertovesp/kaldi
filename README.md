@@ -1,5 +1,10 @@
 [![Build Status](https://travis-ci.com/kaldi-asr/kaldi.svg?branch=master)](https://travis-ci.com/kaldi-asr/kaldi)
+<<<<<<< HEAD
 Desh's fork of Kaldi
+=======
+[![Gitpod Ready-to-Code](https://img.shields.io/badge/Gitpod-Ready--to--Code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/kaldi-asr/kaldi) 
+Kaldi Speech Recognition Toolkit
+>>>>>>> f71d7ba0a9b54b5ee955c44dbe4f935baa603ea2
 ================================
 
 For installation and other information, see the [Kaldi-trunk](https://github.com/kaldi-asr/kaldi)
